@@ -27,8 +27,9 @@ impl HealthMonitor {
     }
 
     async fn check_vpn(&self) -> bool {
-        Command::new(find_bin("tailscale"))
-            .args(["status"])
+        let bin = find_bin("tailscale");
+        Command::new("/bin/sh")
+            .args(["-c", &format!("'{}' status", bin)])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)

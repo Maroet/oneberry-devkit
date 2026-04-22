@@ -8,11 +8,7 @@
           流量拦截
         </h2>
         
-        <div class="filter-tabs">
-          <div class="tab active">全部</div>
-          <div class="tab">活跃</div>
-          <div class="tab">本地</div>
-        </div>
+
       </div>
 
       <div class="header-actions">
@@ -191,12 +187,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, h } from 'vue'
-import { NButton, NTag, NSpace, NInput, NSpin, useMessage, NIcon } from 'naive-ui'
+import { NButton, NTag, NSpace, NInput, NSpin, useMessage, useDialog, NIcon } from 'naive-ui'
 import { Rocket, Plus, Pencil, Search } from 'lucide-vue-next'
 import { useAppStore, type SessionLogLine } from '../stores/app'
 
 const store = useAppStore()
 const message = useMessage()
+const dialog = useDialog()
 
 // Environment state
 const isEnvConnected = computed(() => store.vpn.status === 'connected' && store.cluster.status === 'connected')
@@ -339,14 +336,21 @@ async function doExchange() {
     const errMsg = typeof e === 'string' ? e : (e?.message || '启动失败')
     // Detect "already exchanging" conflict
     if (errMsg.includes('already exchanging') || errMsg.includes('already')) {
-      message.error(`${selectedService.value} 已被其他进程拦截，正在自动清理...`)
-      // Auto-recover: clean up stale exchange and retry
-      try {
-        await store.recoverService(selectedService.value)
-        message.success('清理完成，请重新点击「开始拦截」')
-      } catch (recoverErr: any) {
-        message.error(`自动清理失败: ${recoverErr}`)
-      }
+      dialog.warning({
+        title: '服务冲突',
+        content: `「${selectedService.value}」正在被其他用户拦截中。\n\n可能是你上次异常退出的残留，也可能是同事正在联调。\n\n强制接管会中断当前的拦截会话。`,
+        positiveText: '强制接管',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+          try {
+            message.loading('正在清理残留会话...')
+            await store.recoverService(selectedService.value)
+            message.success('清理完成，请重新点击「开始拦截」')
+          } catch (recoverErr: any) {
+            message.error(`清理失败: ${recoverErr}`)
+          }
+        },
+      })
     } else {
       message.error(errMsg)
     }

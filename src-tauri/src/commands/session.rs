@@ -493,6 +493,14 @@ pub async fn recover_service(
             }
             // Recover might fail if nothing to recover — that's OK
         }
+
+        // Also remove stale kt-selector annotation from the k8s service
+        // This annotation blocks new exchanges even after shadow pods are gone
+        let kubectl_bin = find_bin("kubectl");
+        let _ = Command::new(&kubectl_bin)
+            .args(["annotate", "svc", &service, "kt-selector-", "-n", &ns])
+            .output();
+
         Ok(format!("服务 {} 的残留会话已清理", service))
     }
 
@@ -506,6 +514,12 @@ pub async fn recover_service(
         if !output.status.success() {
             // Recover might fail if nothing to recover — that's OK
         }
+
+        let kubectl_bin = find_bin("kubectl");
+        let _ = Command::new(&kubectl_bin)
+            .args(["annotate", "svc", &service, "kt-selector-", "-n", &ns])
+            .output();
+
         Ok(format!("服务 {} 的残留会话已清理", service))
     }
 }

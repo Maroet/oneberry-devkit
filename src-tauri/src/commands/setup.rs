@@ -34,9 +34,10 @@ impl Default for AppConfig {
 
 #[tauri::command]
 pub async fn check_setup() -> Result<SetupStatus, String> {
-    // Tailscale — 必须使用系统安装版本 (需要 daemon)
-    let tailscale = Command::new(find_bin("tailscale"))
-        .arg("version")
+    // Tailscale — run via sh -c to break .app bundle XPC restriction
+    let ts_bin = find_bin("tailscale");
+    let tailscale = Command::new("/bin/sh")
+        .args(["-c", &format!("'{}' version", ts_bin)])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -115,8 +116,9 @@ pub async fn install_tailscale(app: tauri::AppHandle) -> Result<String, String> 
             // macOS permissions dialog for the user.
             let mut daemon_ready = false;
             for i in 0..15 {
-                let check = Command::new(find_bin("tailscale"))
-                    .args(["status", "--json"])
+                let ts_bin = find_bin("tailscale");
+                let check = Command::new("/bin/sh")
+                    .args(["-c", &format!("'{}' status --json", ts_bin)])
                     .output();
                 if let Ok(o) = check {
                     if o.status.success() {

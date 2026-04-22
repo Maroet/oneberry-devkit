@@ -25,7 +25,9 @@ fn get_system_paths(name: &str) -> Vec<String> {
     {
         match name {
             "tailscale" => vec![
-                "/Applications/Tailscale.app/Contents/MacOS/Tailscale".to_string(),
+                // IMPORTANT: lowercase 'tailscale' is the standalone CLI (talks to daemon socket directly)
+                // uppercase 'Tailscale' is the GUI app binary (requires GUI running, fails from .app bundles)
+                "/Applications/Tailscale.app/Contents/MacOS/tailscale".to_string(),
                 "/opt/homebrew/bin/tailscale".to_string(),
                 "/usr/local/bin/tailscale".to_string(),
             ],

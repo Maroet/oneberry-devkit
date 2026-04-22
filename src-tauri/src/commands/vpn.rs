@@ -47,8 +47,11 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
         });
     }
 
-    let output = Command::new(&bin_path)
-        .args(["status", "--json"])
+    // Run via /bin/sh -c to break macOS .app bundle process association.
+    // When called directly from a .app, the CLI can't communicate with
+    // the Tailscale daemon (XPC restriction). sh creates an independent context.
+    let output = Command::new("/bin/sh")
+        .args(["-c", &format!("'{}' status --json", bin_path)])
         .output();
 
     match output {
@@ -95,8 +98,32 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
             }
         },
         Ok(o) => {
-            let json: serde_json::Value = serde_json::from_slice(&o.stdout)
-                .map_err(|e| e.to_string())?;
+            let stdout_str = String::from_utf8_lossy(&o.stdout);
+
+            // Try to parse JSON. The standalone CLI (lowercase `tailscale`) talks
+            // directly to the System Extension daemon — no GUI needed.
+
+            let json: serde_json::Value = match serde_json::from_str(stdout_str.trim()) {
+                Ok(v) => v,
+                Err(e) => {
+                    let preview = if stdout_str.len() > 200 {
+                        format!("{}...", &stdout_str[..200])
+                    } else {
+                        stdout_str.trim().to_string()
+                    };
+                    debug.push_str(&format!(
+                        ", parse_err={}, stdout_len={}, stdout_preview=[{}], verdict=disconnected(bad_json)",
+                        e, stdout_str.len(), preview
+                    ));
+                    return Ok(VpnStatus {
+                        status: "disconnected".to_string(),
+                        auth_url: None,
+                        ip: None,
+                        hostname: None,
+                        debug_info: Some(debug),
+                    });
+                }
+            };
 
             let backend_state = json["BackendState"]
                 .as_str()
@@ -106,6 +133,7 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
                 "Running" => "connected",
                 "NeedsLogin" => "needs_login",
                 "NeedsMachineAuth" => "needs_auth",
+                "Stopped" => "disconnected",
                 _ => "disconnected",
             };
 
@@ -142,9 +170,10 @@ pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String
 
     // Use spawn() instead of output() because `tailscale up` blocks
     // waiting for the user to complete OIDC authentication in the browser.
-    // We fire-and-forget, then let the frontend poll status for auth_url.
-    let _child = Command::new(find_bin("tailscale"))
-        .args(["up", "--login-server", &url, "--accept-routes", "--reset"])
+    // Run via sh -c to break .app bundle XPC restriction.
+    let bin = find_bin("tailscale");
+    let _child = Command::new("/bin/sh")
+        .args(["-c", &format!("'{}' up --login-server '{}' --accept-routes --reset", bin, url)])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
@@ -175,8 +204,10 @@ pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String
 pub async fn disconnect_vpn() -> Result<String, String> {
     // Use spawn() — `tailscale down` can take 30s+ to return via .output(),
     // but the actual disconnect happens instantly. Fire-and-forget.
-    let _child = Command::new(find_bin("tailscale"))
-        .args(["down"])
+    // Run via sh -c to break .app bundle XPC restriction.
+    let bin = find_bin("tailscale");
+    let _child = Command::new("/bin/sh")
+        .args(["-c", &format!("'{}' down", bin)])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()

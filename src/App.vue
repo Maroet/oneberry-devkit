@@ -2,6 +2,7 @@
   <n-config-provider :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
       <n-notification-provider>
+        <n-dialog-provider>
         <div class="app-container">
           
           <!-- Sidebar -->
@@ -80,9 +81,10 @@
             <main class="app-content">
               <router-view />
             </main>
-          </div>
+        </div>
 
         </div>
+        </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
   </n-config-provider>
@@ -138,7 +140,17 @@ const clusterDotClass = computed(() =>
 
 async function toggleEnvironment(val: boolean) {
   if (val) {
-    if (store.vpn.status === 'connected') return
+    // If VPN already connected, just sync cluster and return
+    if (store.vpn.status === 'connected') {
+      isConnecting.value = true
+      store.addSystemLog('-> VPN already connected, syncing cluster...')
+      await store.refreshCluster()
+      isConnecting.value = false
+      if (store.cluster.status === 'connected') {
+        message.success('环境已就绪')
+      }
+      return
+    }
     
     // Always refresh status first so we have accurate state
     isConnecting.value = true
@@ -251,13 +263,24 @@ async function toggleEnvironment(val: boolean) {
     try {
       isConnecting.value = true
       await store.disconnectVpn()
-      setTimeout(async () => {
+      // Poll for disconnected status instead of fixed wait
+      let attempts = 0
+      const poll = setInterval(async () => {
+        attempts++
         await store.refreshVpn()
-        await store.refreshCluster()
-        isConnecting.value = false
-        store.addSystemLog('-> Disconnected')
-        message.success('Disconnected.')
-      }, 1500)
+        if (store.vpn.status !== 'connected') {
+          clearInterval(poll)
+          await store.refreshCluster()
+          isConnecting.value = false
+          store.addSystemLog('-> Disconnected')
+          message.success('Disconnected.')
+        } else if (attempts > 15) {
+          clearInterval(poll)
+          isConnecting.value = false
+          store.addSystemLog('-> Disconnect timeout')
+          message.warning('断开超时，请稍后重试')
+        }
+      }, 1000)
     } catch (e: any) {
       isConnecting.value = false
       store.addSystemLog(`Disconnect Error: ${e}`)
