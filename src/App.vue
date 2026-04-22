@@ -106,10 +106,16 @@ const store = useAppStore()
 
 const isConnecting = ref(false)
 
-// Check environment status on startup
+// Check environment status on startup + periodic refresh
 onMounted(async () => {
   await store.refreshVpn()
   await store.refreshCluster()
+
+  // Keep status in sync — poll every 15s
+  setInterval(async () => {
+    await store.refreshVpn()
+    await store.refreshCluster()
+  }, 15000)
 })
 
 const isEnvConnected = computed(() => {

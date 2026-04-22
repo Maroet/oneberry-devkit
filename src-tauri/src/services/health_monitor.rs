@@ -1,7 +1,6 @@
-use std::process::Command;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use crate::utils::find_bin;
+use crate::utils::{find_bin, run_cli};
 
 pub struct HealthMonitor {
     app: AppHandle,
@@ -28,17 +27,14 @@ impl HealthMonitor {
 
     async fn check_vpn(&self) -> bool {
         let bin = find_bin("tailscale");
-        Command::new("/bin/sh")
-            .args(["-c", &format!("'{}' status", bin)])
-            .output()
+        run_cli(&bin, &["status"])
             .map(|o| o.status.success())
             .unwrap_or(false)
     }
 
     async fn check_cluster(&self) -> bool {
-        Command::new(find_bin("kubectl"))
-            .args(["cluster-info"])
-            .output()
+        let bin = find_bin("kubectl");
+        run_cli(&bin, &["cluster-info"])
             .map(|o| o.status.success())
             .unwrap_or(false)
     }

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use tauri::Manager;
-use crate::utils::find_bin;
+use crate::utils::{find_bin, run_cli};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SetupStatus {
@@ -34,11 +34,9 @@ impl Default for AppConfig {
 
 #[tauri::command]
 pub async fn check_setup() -> Result<SetupStatus, String> {
-    // Tailscale — run via sh -c to break .app bundle XPC restriction
+    // Tailscale — cross-platform CLI check
     let ts_bin = find_bin("tailscale");
-    let tailscale = Command::new("/bin/sh")
-        .args(["-c", &format!("'{}' version", ts_bin)])
-        .output()
+    let tailscale = run_cli(&ts_bin, &["version"])
         .map(|o| o.status.success())
         .unwrap_or(false);
 
@@ -117,9 +115,7 @@ pub async fn install_tailscale(app: tauri::AppHandle) -> Result<String, String> 
             let mut daemon_ready = false;
             for i in 0..15 {
                 let ts_bin = find_bin("tailscale");
-                let check = Command::new("/bin/sh")
-                    .args(["-c", &format!("'{}' status --json", ts_bin)])
-                    .output();
+                let check = run_cli(&ts_bin, &["status", "--json"]);
                 if let Ok(o) = check {
                     if o.status.success() {
                         daemon_ready = true;

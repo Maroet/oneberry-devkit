@@ -105,3 +105,99 @@ pub fn tailscale_download_url() -> &'static str {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     { "https://tailscale.com/download" }
 }
+
+// ─── Cross-platform CLI helpers ───────────────────────────────────────
+
+use std::process::{Command, Output, Stdio};
+
+/// Run a CLI command (blocking) with platform-specific wrapping.
+///
+/// macOS: wraps in `/bin/sh -c '...'` to bypass .app bundle XPC restrictions.
+/// Windows/Linux: runs the binary directly — no wrapping needed.
+pub fn run_cli(bin: &str, args: &[&str]) -> std::io::Result<Output> {
+    #[cfg(target_os = "macos")]
+    {
+        let full_cmd = std::iter::once(format!("'{}'", bin))
+            .chain(args.iter().map(|a| format!("'{}'", a)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        Command::new("/bin/sh")
+            .args(["-c", &full_cmd])
+            .output()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Command::new(bin)
+            .args(args)
+            .output()
+    }
+}
+
+/// Spawn a CLI command (non-blocking, fire-and-forget) with platform-specific wrapping.
+///
+/// Same platform logic as `run_cli`, but uses `spawn()` instead of `output()`.
+pub fn spawn_cli(bin: &str, args: &[&str]) -> std::io::Result<std::process::Child> {
+    #[cfg(target_os = "macos")]
+    {
+        let full_cmd = std::iter::once(format!("'{}'", bin))
+            .chain(args.iter().map(|a| format!("'{}'", a)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        Command::new("/bin/sh")
+            .args(["-c", &full_cmd])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Command::new(bin)
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+    }
+}
+
+/// Check if a bare binary name exists in PATH.
+///
+/// macOS/Linux: uses `which`. Windows: uses `where`.
+pub fn check_bin_in_path(name: &str) -> (bool, String) {
+    #[cfg(target_os = "windows")]
+    let checker = "where";
+    #[cfg(not(target_os = "windows"))]
+    let checker = "which";
+
+    let result = Command::new(checker).arg(name).output();
+    let exists = result.as_ref().map(|o| o.status.success()).unwrap_or(false);
+    let path = result.ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    (exists, path)
+}
+
+/// Check if a process is alive by PID (cross-platform).
+pub fn is_process_alive(pid: u32) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid), "/NH"])
+            .output()
+            .map(|o| {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                o.status.success() && stdout.contains(&pid.to_string())
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("ps")
+            .args(["-p", &pid.to_string()])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+}

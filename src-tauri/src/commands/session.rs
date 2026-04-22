@@ -5,7 +5,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{AppHandle, Emitter};
-use crate::utils::find_bin;
+use crate::utils::{find_bin, is_process_alive};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SessionInfo {
@@ -89,7 +89,7 @@ impl SessionManager {
     }
 }
 
-/// Kill a root-owned process. On macOS, uses osascript for privilege elevation.
+/// Kill a root-owned process with platform-specific privilege elevation.
 fn kill_root_process(pid: u32) {
     #[cfg(target_os = "macos")]
     {
@@ -102,7 +102,13 @@ fn kill_root_process(pid: u32) {
             .args(["-e", &script])
             .output();
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .output();
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = Command::new("kill")
             .arg(pid.to_string())
@@ -240,16 +246,8 @@ fn spawn_session(
                 line_buf.clear();
                 match reader.read_line(&mut line_buf) {
                     Ok(0) => {
-                        // EOF — check if process is still alive.
-                        // NOTE: can't use `kill -0` because ktctl runs as root
-                        // and the DevKit runs as a normal user — kill would get EPERM.
-                        // Use `ps -p` instead, which works regardless of user.
-                        let alive = Command::new("ps")
-                            .args(["-p", &pid.to_string()])
-                            .output()
-                            .map(|o| o.status.success())
-                            .unwrap_or(false);
-                        if !alive { break; }
+                        // EOF — check if process is still alive (cross-platform).
+                        if !is_process_alive(pid) { break; }
                         thread::sleep(std::time::Duration::from_millis(300));
                     }
                     Ok(_) => {
@@ -290,10 +288,11 @@ fn spawn_session(
 
         #[cfg(target_os = "windows")]
         {
+            // Windows: ktctl does not require admin privileges for exchange/mesh
             cmd = Command::new(&ktctl_bin);
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             cmd = Command::new("sudo");
             cmd.arg(&ktctl_bin);
@@ -504,7 +503,27 @@ pub async fn recover_service(
         Ok(format!("服务 {} 的残留会话已清理", service))
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: ktctl does not require admin privileges
+        let output = Command::new(&ktctl_bin)
+            .args(["recover", &service, "-n", &ns])
+            .output()
+            .map_err(|e| format!("清理失败: {}", e))?;
+
+        if !output.status.success() {
+            // Recover might fail if nothing to recover — that's OK
+        }
+
+        let kubectl_bin = find_bin("kubectl");
+        let _ = Command::new(&kubectl_bin)
+            .args(["annotate", "svc", &service, "kt-selector-", "-n", &ns])
+            .output();
+
+        Ok(format!("服务 {} 的残留会话已清理", service))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let output = Command::new("sudo")
             .args([&ktctl_bin, "recover", &service, "-n", &ns])

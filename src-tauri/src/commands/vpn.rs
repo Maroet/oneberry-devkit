@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
-use crate::utils::find_bin;
+use crate::utils::{find_bin, run_cli, spawn_cli, check_bin_in_path};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VpnStatus {
@@ -20,14 +19,8 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
 
     // First: check if the binary actually exists on disk.
     let binary_exists = if bin_path == "tailscale" {
-        // Bare name fallback — check if it's in PATH by trying `which`
-        let which_result = Command::new("which")
-            .arg("tailscale")
-            .output();
-        let exists = which_result.as_ref().map(|o| o.status.success()).unwrap_or(false);
-        let which_path = which_result.ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default();
+        // Bare name fallback — check if it's in PATH
+        let (exists, which_path) = check_bin_in_path("tailscale");
         debug.push_str(&format!(", which_exists={}, which_path={}", exists, which_path));
         exists
     } else {
@@ -47,12 +40,8 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
         });
     }
 
-    // Run via /bin/sh -c to break macOS .app bundle process association.
-    // When called directly from a .app, the CLI can't communicate with
-    // the Tailscale daemon (XPC restriction). sh creates an independent context.
-    let output = Command::new("/bin/sh")
-        .args(["-c", &format!("'{}' status --json", bin_path)])
-        .output();
+    // Cross-platform CLI call (macOS wraps in sh, Windows calls directly)
+    let output = run_cli(&bin_path, &["status", "--json"]);
 
     match output {
         Err(e) => {
@@ -100,9 +89,7 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
         Ok(o) => {
             let stdout_str = String::from_utf8_lossy(&o.stdout);
 
-            // Try to parse JSON. The standalone CLI (lowercase `tailscale`) talks
-            // directly to the System Extension daemon — no GUI needed.
-
+            // Try to parse JSON
             let json: serde_json::Value = match serde_json::from_str(stdout_str.trim()) {
                 Ok(v) => v,
                 Err(e) => {
@@ -168,15 +155,10 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
 pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String> {
     let url = headscale_url.unwrap_or_else(|| "https://vpn.oneberry.cc:31443".to_string());
 
-    // Use spawn() instead of output() because `tailscale up` blocks
-    // waiting for the user to complete OIDC authentication in the browser.
-    // Run via sh -c to break .app bundle XPC restriction.
+    // Use spawn_cli() — `tailscale up` blocks waiting for OIDC auth.
+    // Fire-and-forget, then let the frontend poll status for auth_url.
     let bin = find_bin("tailscale");
-    let _child = Command::new("/bin/sh")
-        .args(["-c", &format!("'{}' up --login-server '{}' --accept-routes --reset", bin, url)])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
+    let _child = spawn_cli(&bin, &["up", "--login-server", &url, "--accept-routes", "--reset"])
         .map_err(|e| format!("启动 Tailscale 失败: {}", e))?;
 
     // Wait a moment for tailscale to register the login request
@@ -202,15 +184,10 @@ pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String
 
 #[tauri::command]
 pub async fn disconnect_vpn() -> Result<String, String> {
-    // Use spawn() — `tailscale down` can take 30s+ to return via .output(),
+    // Use spawn_cli() — `tailscale down` can take 30s+ via output(),
     // but the actual disconnect happens instantly. Fire-and-forget.
-    // Run via sh -c to break .app bundle XPC restriction.
     let bin = find_bin("tailscale");
-    let _child = Command::new("/bin/sh")
-        .args(["-c", &format!("'{}' down", bin)])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
+    let _child = spawn_cli(&bin, &["down"])
         .map_err(|e| format!("断开失败: {}", e))?;
     Ok("VPN 已断开".to_string())
 }
