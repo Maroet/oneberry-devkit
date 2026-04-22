@@ -132,6 +132,7 @@ const envStatusText = computed(() => {
   if (store.vpn.status === 'not_installed') return '未安装'
   if (isConnecting.value) return '连接中...'
   if (isEnvConnected.value) return '已连接'
+  if (store.vpn.status === 'connected') return 'VPN 已连接'
   return '未连接'
 })
 
