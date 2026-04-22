@@ -146,14 +146,26 @@ pub async fn install_tailscale(app: tauri::AppHandle) -> Result<String, String> 
 
     #[cfg(target_os = "windows")]
     {
-        let resource_dir = app.path()
-            .resource_dir()
-            .map_err(|e| format!("无法获取资源目录: {}", e))?;
-        let msi_path = resource_dir.join("resources").join("tailscale-windows.msi");
+        use std::path::PathBuf;
 
-        if msi_path.exists() {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+
+        // 1. Tauri resource_dir (works in production bundle)
+        if let Ok(rd) = app.path().resource_dir() {
+            candidates.push(rd.join("resources").join("tailscale-windows.msi"));
+        }
+
+        // 2. Dev mode: relative to the workspace src-tauri dir
+        let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("tailscale-windows.msi");
+        candidates.push(dev_path);
+
+        let msi_path = candidates.iter().find(|p| p.exists());
+
+        if let Some(path) = msi_path {
             let output = Command::new("msiexec")
-                .args(["/i", msi_path.to_str().unwrap(), "/quiet"])
+                .args(["/i", path.to_str().unwrap(), "/quiet"])
                 .output()
                 .map_err(|e| format!("安装失败: {}", e))?;
 
