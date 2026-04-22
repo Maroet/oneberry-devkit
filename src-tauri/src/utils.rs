@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 /// 解析系统工具二进制路径
 ///
 /// 优先级：
@@ -53,6 +56,11 @@ fn get_system_paths(name: &str) -> Vec<String> {
             "tailscale" => vec![
                 format!("{}\\Tailscale\\tailscale.exe", program_files),
                 format!("{}\\Tailscale IPN\\tailscale.exe", program_files),
+                // User-specific install locations
+                format!("{}\\Tailscale\\tailscale.exe", local_app_data),
+                format!("{}\\Tailscale IPN\\tailscale.exe", local_app_data),
+                // Fallback: 64-bit program files on 32-bit process
+                "C:\\Program Files\\Tailscale\\tailscale.exe".to_string(),
             ],
             "kubectl" => vec![
                 format!("{}\\kubectl\\kubectl.exe", program_files),
@@ -126,7 +134,17 @@ pub fn run_cli(bin: &str, args: &[&str]) -> std::io::Result<Output> {
             .output()
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        // CREATE_NO_WINDOW (0x08000000) prevents terminal window flashing
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new(bin)
+            .args(args)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Command::new(bin)
             .args(args)
@@ -151,7 +169,18 @@ pub fn spawn_cli(bin: &str, args: &[&str]) -> std::io::Result<std::process::Chil
             .spawn()
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new(bin)
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Command::new(bin)
             .args(args)

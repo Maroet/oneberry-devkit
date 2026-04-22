@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{AppHandle, Emitter};
@@ -289,7 +291,9 @@ fn spawn_session(
         #[cfg(target_os = "windows")]
         {
             // Windows: ktctl does not require admin privileges for exchange/mesh
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
             cmd = Command::new(&ktctl_bin);
+            cmd.creation_flags(CREATE_NO_WINDOW);
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
