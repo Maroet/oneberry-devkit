@@ -7,6 +7,44 @@ use commands::session::SessionManager;
 use services::health_monitor::HealthMonitor;
 use std::sync::Arc;
 
+/// Auto-deploy bundled kubeconfig to ~/.kube/config if not present.
+/// This ensures kubectl works out-of-the-box for new installations.
+fn deploy_kubeconfig(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    let home = dirs_next::home_dir().unwrap_or_default();
+    let kube_dir = home.join(".kube");
+    let kube_config = kube_dir.join("config");
+
+    // Don't overwrite existing config
+    if kube_config.exists() {
+        return;
+    }
+
+    // Try to find bundled kubeconfig
+    let mut candidates = Vec::new();
+
+    // 1. Production: resource_dir
+    if let Ok(rd) = app.path().resource_dir() {
+        candidates.push(rd.join("resources").join("kubeconfig"));
+    }
+
+    // 2. Dev mode: CARGO_MANIFEST_DIR
+    let dev_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join("kubeconfig");
+    candidates.push(dev_path);
+
+    if let Some(src) = candidates.iter().find(|p| p.exists()) {
+        // Create ~/.kube/ directory
+        let _ = std::fs::create_dir_all(&kube_dir);
+        match std::fs::copy(src, &kube_config) {
+            Ok(_) => eprintln!("[DevKit] Deployed kubeconfig to {}", kube_config.display()),
+            Err(e) => eprintln!("[DevKit] Failed to deploy kubeconfig: {}", e),
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let session_manager = Arc::new(SessionManager::new());
@@ -34,6 +72,9 @@ pub fn run() {
             setup::save_config,
         ])
         .setup(|app| {
+            // Auto-deploy kubeconfig if not present
+            deploy_kubeconfig(app.handle());
+
             // Build tray icon
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .tooltip("OneBerry DevKit")
