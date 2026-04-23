@@ -334,18 +334,21 @@ async function doExchange() {
     showExchange.value = false
   } catch (e: any) {
     const errMsg = typeof e === 'string' ? e : (e?.message || '启动失败')
-    // Detect "already exchanging" conflict
-    if (errMsg.includes('already exchanging') || errMsg.includes('already')) {
+    // Detect stale session conflicts: "already exchanging", kt-selector annotation, invalid status
+    const isConflict = ['already exchanging', 'already', 'kt-selector', 'invalid status'].some(kw => errMsg.includes(kw))
+    if (isConflict) {
       dialog.warning({
         title: '服务冲突',
-        content: `「${selectedService.value}」正在被其他用户拦截中。\n\n可能是你上次异常退出的残留，也可能是同事正在联调。\n\n强制接管会中断当前的拦截会话。`,
+        content: `「${selectedService.value}」存在残留的拦截状态。\n\n可能是你上次异常退出的残留，也可能是同事正在联调。\n\n强制接管会清理残留并重新发起拦截。`,
         positiveText: '强制接管',
         negativeText: '取消',
         onPositiveClick: async () => {
           try {
             message.loading('正在清理残留会话...')
             await store.recoverService(selectedService.value)
-            message.success('清理完成，请重新点击「开始拦截」')
+            message.success('清理完成，正在重新拦截...')
+            // Auto-retry after cleanup
+            await doExchange()
           } catch (recoverErr: any) {
             message.error(`清理失败: ${recoverErr}`)
           }
