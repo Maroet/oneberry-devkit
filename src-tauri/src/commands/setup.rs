@@ -146,74 +146,13 @@ pub async fn install_tailscale(app: tauri::AppHandle) -> Result<String, String> 
 
     #[cfg(target_os = "windows")]
     {
-        use std::path::PathBuf;
-
-        let mut candidates: Vec<PathBuf> = Vec::new();
-
-        // 1. Tauri resource_dir (works in production bundle)
-        if let Ok(rd) = app.path().resource_dir() {
-            candidates.push(rd.join("resources").join("tailscale-windows.msi"));
-        }
-
-        // 2. Dev mode: relative to the workspace src-tauri dir
-        let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("tailscale-windows.msi");
-        candidates.push(dev_path);
-
-        let msi_path = candidates.iter().find(|p| p.exists());
-
-        if let Some(path) = msi_path {
-            // Use PowerShell Start-Process -Verb RunAs to trigger UAC elevation dialog
-            // This is the Windows equivalent of macOS's osascript "with administrator privileges"
-            let msi_str = path.to_str().unwrap().replace('\'', "''");
-            let ps_script = format!(
-                "Start-Process msiexec -ArgumentList '/i','{}','/quiet' -Verb RunAs -Wait",
-                msi_str
-            );
-            let output = Command::new("powershell")
-                .args(["-NoProfile", "-Command", &ps_script])
-                .output()
-                .map_err(|e| format!("启动安装器失败: {}", e))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                // User cancelled UAC prompt
-                if stderr.contains("canceled") || stderr.contains("cancelled")
-                    || output.status.code() == Some(1) {
-                    return Err("用户取消了安装".to_string());
-                }
-                return Err(format!("安装失败: {}", stderr));
-            }
-
-            // Post-install: wait for Tailscale service to be ready
-            let mut daemon_ready = false;
-            for i in 0..15 {
-                let ts_bin = find_bin("tailscale");
-                let check = run_cli(&ts_bin, &["status", "--json"]);
-                if let Ok(o) = check {
-                    if o.status.success() {
-                        daemon_ready = true;
-                        break;
-                    }
-                }
-                if i < 14 {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-            }
-
-            if daemon_ready {
-                Ok("安装完成，守护进程已就绪".to_string())
-            } else {
-                Ok("安装完成，请稍等 Tailscale 服务启动".to_string())
-            }
-        } else {
-            let download_url = crate::utils::tailscale_download_url();
-            Err(format!(
-                "未找到内嵌的 Tailscale 安装包。请手动下载安装: {}",
-                download_url
-            ))
-        }
+        // On Windows, the official .exe installer is more reliable than embedded MSI.
+        // Open the download page and let the user install the standard way.
+        let download_url = crate::utils::tailscale_download_url();
+        let _ = Command::new("cmd")
+            .args(["/c", "start", download_url])
+            .output();
+        Ok(format!("OPEN_BROWSER:请从浏览器下载安装 Tailscale，安装完成后点击「重试」"))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]

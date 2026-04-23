@@ -171,27 +171,42 @@ async function toggleEnvironment(val: boolean) {
       store.addSystemLog('[DEBUG] -> Showing install dialog')
       dialog.info({
         title: '需要初始化环境',
-        content: '检测到运行环境缺少底层网络组件 (Tailscale)。只需点击"立即安装"，DevKit 会自动完成授权和部署。',
+        content: '检测到运行环境缺少底层网络组件 (Tailscale)。点击下方按钮开始安装。',
         positiveText: '🚀 立即安装',
         negativeText: '取消',
         onPositiveClick: async () => {
           isConnecting.value = true
-          store.addSystemLog('-> 正在静默安装系统组件...')
+          store.addSystemLog('-> 正在安装系统组件...')
           try {
             const installResult = await store.installTailscale()
             store.addSystemLog(`-> install result: ${installResult}`)
-            // Refresh status after install
+
+            // Windows: backend opens browser, show retry dialog
+            if (typeof installResult === 'string' && installResult.startsWith('OPEN_BROWSER:')) {
+              isConnecting.value = false
+              const msg = installResult.replace('OPEN_BROWSER:', '')
+              dialog.info({
+                title: '请先完成安装',
+                content: msg,
+                positiveText: '✅ 安装完成，重试连接',
+                negativeText: '稍后再说',
+                onPositiveClick: () => {
+                  toggleEnvironment(true)
+                }
+              })
+              return
+            }
+
+            // macOS: silent install, auto-proceed
             await store.refreshVpn()
             store.addSystemLog(`[DEBUG] post-install vpn.status=${store.vpn.status}`)
             
             if (store.vpn.status === 'not_installed') {
-              // Daemon not ready yet — may need Network Extension approval
               message.warning(installResult || '安装似乎未完成，请检查系统设置')
               isConnecting.value = false
             } else {
               message.success('组件安装成功！正在连接...')
               store.addSystemLog(`[DEBUG] -> Auto-proceeding to connect (status=${store.vpn.status})`)
-              // Auto-proceed to connect
               setTimeout(() => toggleEnvironment(true), 1000)
             }
           } catch (e: any) {
