@@ -88,7 +88,15 @@
             <n-button size="small" secondary class="action-btn" @click="toggleLog(session.id)">
                日志
             </n-button>
-            <n-button size="small" secondary class="action-btn" @click="store.stopSession(session.id)">
+            <template v-if="session.status === 'stopped'">
+              <n-button size="small" type="primary" class="action-btn reconnect-btn" :loading="reconnectingId === session.id" @click="reconnectSession(session)">
+                <template #icon><n-icon :component="RefreshCw" /></template> 重新连接
+              </n-button>
+              <n-button size="small" secondary class="action-btn" @click="removeSession(session.id)">
+                 清除
+              </n-button>
+            </template>
+            <n-button v-else size="small" secondary class="action-btn" @click="store.stopSession(session.id)">
                停止
             </n-button>
           </div>
@@ -188,7 +196,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { NButton, NTag, NSpace, NInput, NSpin, useMessage, useDialog, NIcon } from 'naive-ui'
-import { Rocket, Plus, Pencil, Search } from 'lucide-vue-next'
+import { Rocket, Plus, Pencil, Search, RefreshCw } from 'lucide-vue-next'
 import { useAppStore, type SessionLogLine } from '../stores/app'
 
 const store = useAppStore()
@@ -215,6 +223,7 @@ const localPort = ref(38000)
 const exchangeLoading = ref(false)
 const meshVersionHeader = ref('')
 const editingSessionId = ref<string | null>(null)
+const reconnectingId = ref<string | null>(null)
 
 // Logs
 const expandedSession = ref<string | null>(null)
@@ -360,6 +369,37 @@ async function doExchange() {
   } finally {
     exchangeLoading.value = false
   }
+}
+
+async function reconnectSession(session: any) {
+  reconnectingId.value = session.id
+  try {
+    // Remove old dead session first
+    store.sessions = store.sessions.filter(s => s.id !== session.id)
+    store.sessionLogs.delete(session.id)
+
+    // Start a new session with the same parameters
+    let newSession
+    if (session.mode === 'mesh') {
+      newSession = await store.startMesh(session.service, session.port)
+      message.success(`Mesh 已重新连接: ${session.service}`)
+    } else {
+      newSession = await store.startExchange(session.service, session.port)
+      message.success(`Exchange 已重新连接: ${session.service} → localhost:${session.port}`)
+    }
+    expandedSession.value = newSession.id
+  } catch (e: any) {
+    const errMsg = typeof e === 'string' ? e : (e?.message || '重新连接失败')
+    message.error(errMsg)
+  } finally {
+    reconnectingId.value = null
+  }
+}
+
+function removeSession(sessionId: string) {
+  store.sessions = store.sessions.filter(s => s.id !== sessionId)
+  store.sessionLogs.delete(sessionId)
+  if (expandedSession.value === sessionId) expandedSession.value = null
 }
 
 // Event listeners
@@ -564,6 +604,10 @@ onUnmounted(() => cleanups.forEach(fn => fn()))
 
 .action-btn {
   border-radius: 6px;
+}
+
+.reconnect-btn {
+  font-weight: 600;
 }
 
 /* Bottom Meta Row */

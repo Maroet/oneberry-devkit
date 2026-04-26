@@ -51,7 +51,6 @@ impl SessionManager {
         sessions.values().map(|s| s.info.clone()).collect()
     }
 
-    #[allow(dead_code)]
     pub fn update_status(&self, id: &str, status: &str) {
         let mut sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get_mut(id) {
@@ -165,7 +164,7 @@ fn build_ktctl_command(args: &[&str]) -> Command {
 /// then background the process and tail its log file for streaming output.
 fn spawn_session(
     app: &AppHandle,
-    manager: &SessionManager,
+    manager: Arc<SessionManager>,
     info: SessionInfo,
     args: Vec<String>,
 ) -> Result<SessionInfo, String> {
@@ -230,6 +229,7 @@ fn spawn_session(
         let app_clone = app.clone();
         let sid = session_id.clone();
         let log_path_clone = log_path.clone();
+        let mgr_clone = manager.clone();
         thread::spawn(move || {
             // Wait for log file to appear
             for _ in 0..50 {
@@ -264,7 +264,8 @@ fn spawn_session(
                     Err(_) => break,
                 }
             }
-            // Process ended
+            // Process ended — update backend state AND notify frontend
+            mgr_clone.update_status(&sid, "stopped");
             let _ = app_clone.emit("session:ended", &sid);
             // Cleanup log files
             let _ = std::fs::remove_file(&log_path_clone);
@@ -313,6 +314,7 @@ fn spawn_session(
         // Capture stdout
         let app_clone = app.clone();
         let sid = session_id.clone();
+        let mgr_clone = manager.clone();
         if let Some(stdout) = child.stdout.take() {
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
@@ -327,6 +329,8 @@ fn spawn_session(
                         let _ = app_clone.emit("session:log", &log);
                     }
                 }
+                // Process ended — update backend state AND notify frontend
+                mgr_clone.update_status(&sid, "stopped");
                 let _ = app_clone.emit("session:ended", &sid);
             });
         }
@@ -401,7 +405,7 @@ pub async fn start_exchange(
         ns,
     ];
 
-    spawn_session(&app, &manager, info, args)
+    spawn_session(&app, manager.inner().clone(), info, args)
 }
 
 #[tauri::command]
@@ -441,7 +445,7 @@ pub async fn start_mesh(
         ns,
     ];
 
-    spawn_session(&app, &manager, info, args)
+    spawn_session(&app, manager.inner().clone(), info, args)
 }
 
 #[tauri::command]
