@@ -176,7 +176,7 @@
         <n-form-item v-if="exchangeMode === 'mesh'" label="Version Header">
           <n-input v-model:value="meshVersionHeader" placeholder="例如: devkit-abc123" />
           <template #feedback>
-            <span style="font-size: 12px; color: var(--text-muted);">请求头中 <code>X-Version</code> 值匹配时，流量将路由到本地</span>
+            <span style="font-size: 12px; color: var(--text-muted);">请求头中 <code>VERSION</code> 值匹配时，流量将路由到本地</span>
           </template>
         </n-form-item>
       </n-form>
@@ -336,7 +336,7 @@ async function doExchange() {
       message.success(`Exchange 已启动: ${selectedService.value} → localhost:${localPort.value}`)
       expandedSession.value = session.id
     } else {
-      const session = await store.startMesh(selectedService.value, localPort.value)
+      const session = await store.startMesh(selectedService.value, localPort.value, meshVersionHeader.value)
       message.success(`Mesh 已启动，查看日志获取 Version Header`)
       expandedSession.value = session.id
     }
@@ -381,7 +381,7 @@ async function reconnectSession(session: any) {
     // Start a new session with the same parameters
     let newSession
     if (session.mode === 'mesh') {
-      newSession = await store.startMesh(session.service, session.port)
+      newSession = await store.startMesh(session.service, session.port, session.version_header)
       message.success(`Mesh 已重新连接: ${session.service}`)
     } else {
       newSession = await store.startExchange(session.service, session.port)

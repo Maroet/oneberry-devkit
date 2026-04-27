@@ -194,8 +194,8 @@ export const useAppStore = defineStore('app', () => {
     return session
   }
 
-  async function startMesh(service: string, port: number) {
-    const session = await safeInvoke<SessionInfo>('start_mesh', { service, port })
+  async function startMesh(service: string, port: number, versionHeader?: string) {
+    const session = await safeInvoke<SessionInfo>('start_mesh', { service, port, versionHeader })
     sessions.value.push(session)
     sessionLogs.value.set(session.id, [])
     return session

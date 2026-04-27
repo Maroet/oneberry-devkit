@@ -415,6 +415,7 @@ pub async fn start_mesh(
     service: String,
     port: u16,
     namespace: Option<String>,
+    version_header: Option<String>,
 ) -> Result<SessionInfo, String> {
     let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
 
@@ -424,7 +425,9 @@ pub async fn start_mesh(
     }
 
     let id = format!("mesh-{}-{}", service, chrono::Utc::now().timestamp());
-    let version = format!("devkit-{}", &id[id.len()-6..]);
+    let version = version_header
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("devkit-{}", &id[id.len()-6..]));
 
     let info = SessionInfo {
         id: id.clone(),
@@ -432,7 +435,7 @@ pub async fn start_mesh(
         port,
         mode: "mesh".to_string(),
         started_at: chrono::Utc::now().to_rfc3339(),
-        version_header: Some(version),
+        version_header: Some(version.clone()),
         status: "starting".to_string(),
     };
 
@@ -441,6 +444,8 @@ pub async fn start_mesh(
         service,
         "--expose".to_string(),
         port.to_string(),
+        "--versionMark".to_string(),
+        version,
         "-n".to_string(),
         ns,
     ];
