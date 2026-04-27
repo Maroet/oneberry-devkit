@@ -95,7 +95,7 @@ import { zhCN, dateZhCN, createDiscreteApi, NIcon } from 'naive-ui'
 import { Hexagon, LayoutDashboard, Settings as SettingsIcon, Beaker, ScrollText } from 'lucide-vue-next'
 import { useRouter, useRoute } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from './stores/app'
 
 const { message, dialog } = createDiscreteApi(['message', 'dialog'])
@@ -235,7 +235,7 @@ async function toggleEnvironment(val: boolean) {
         store.addSystemLog(`-> Auth required. Opening browser...`)
         authOpened = true
         try {
-          await openUrl(authUrl)
+          await invoke('open_auth_url', { url: authUrl })
         } catch (e) {
           store.addSystemLog(`Failed to open browser: ${e}`)
         }
@@ -266,7 +266,7 @@ async function toggleEnvironment(val: boolean) {
           authOpened = true
           store.addSystemLog(`-> Auth required. Opening browser...`)
           try {
-            await openUrl(store.vpn.auth_url)
+            await invoke('open_auth_url', { url: store.vpn.auth_url })
           } catch (e) {
             store.addSystemLog(`Failed to open browser: ${e}`)
           }

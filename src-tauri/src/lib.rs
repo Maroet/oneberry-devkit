@@ -59,6 +59,7 @@ pub fn run() {
             vpn::check_vpn,
             vpn::connect_vpn,
             vpn::disconnect_vpn,
+            vpn::open_auth_url,
             cluster::check_cluster,
             cluster::list_services,
             session::start_exchange,

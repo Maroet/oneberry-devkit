@@ -1,5 +1,16 @@
 use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
+use tauri_plugin_opener::OpenerExt;
 use crate::utils::{find_bin, run_cli, spawn_cli, check_bin_in_path};
+
+/// Open a URL in the system browser from the Rust side.
+/// This bypasses the frontend opener plugin's scope restrictions.
+#[tauri::command]
+pub async fn open_auth_url(app: AppHandle, url: String) -> Result<(), String> {
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("Failed to open browser: {}", e))
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VpnStatus {
