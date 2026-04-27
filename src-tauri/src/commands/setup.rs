@@ -41,16 +41,12 @@ pub async fn check_setup() -> Result<SetupStatus, String> {
         .unwrap_or(false);
 
     // kubectl — 优先检测 sidecar，fallback 到系统路径
-    let kubectl = Command::new(find_bin("kubectl"))
-        .args(["version", "--client", "--short"])
-        .output()
+    let kubectl = run_cli(&find_bin("kubectl"), &["version", "--client", "--short"])
         .map(|o| o.status.success())
         .unwrap_or(false);
 
     // ktctl — 优先检测 sidecar，fallback 到系统路径
-    let ktctl = Command::new(find_bin("ktctl"))
-        .arg("--version")
-        .output()
+    let ktctl = run_cli(&find_bin("ktctl"), &["--version"])
         .map(|o| o.status.success())
         .unwrap_or(false);
 
@@ -149,8 +145,11 @@ pub async fn install_tailscale(app: tauri::AppHandle) -> Result<String, String> 
         // On Windows, the official .exe installer is more reliable than embedded MSI.
         // Open the download page and let the user install the standard way.
         let download_url = crate::utils::tailscale_download_url();
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let _ = Command::new("cmd")
             .args(["/c", "start", download_url])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
         Ok(format!("OPEN_BROWSER:请从浏览器下载安装 Tailscale，安装完成后点击「重试」"))
     }

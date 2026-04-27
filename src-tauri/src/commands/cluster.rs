@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
-use crate::utils::find_bin;
+use crate::utils::{find_bin, run_cli};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClusterStatus {
@@ -19,9 +18,7 @@ pub struct K8sService {
 
 #[tauri::command]
 pub async fn check_cluster() -> Result<ClusterStatus, String> {
-    let output = Command::new(find_bin("kubectl"))
-        .args(["get", "nodes", "-o", "json"])
-        .output();
+    let output = run_cli(&find_bin("kubectl"), &["get", "nodes", "-o", "json"]);
 
     match output {
         Err(e) => Ok(ClusterStatus {
@@ -56,13 +53,11 @@ pub async fn check_cluster() -> Result<ClusterStatus, String> {
 
 #[tauri::command]
 pub async fn list_services() -> Result<Vec<K8sService>, String> {
-    let output = Command::new(find_bin("kubectl"))
-        .args([
+    let output = run_cli(&find_bin("kubectl"), &[
             "get", "deployments",
             "-n", "oneberry-dev",
             "-o", "json",
         ])
-        .output()
         .map_err(|e| format!("kubectl 执行失败: {}", e))?;
 
     if !output.status.success() {

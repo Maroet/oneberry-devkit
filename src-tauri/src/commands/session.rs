@@ -105,8 +105,10 @@ fn kill_root_process(pid: u32) {
     }
     #[cfg(target_os = "windows")]
     {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let _ = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -519,8 +521,10 @@ pub async fn recover_service(
     #[cfg(target_os = "windows")]
     {
         // Windows: ktctl does not require admin privileges
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let output = Command::new(&ktctl_bin)
             .args(["recover", &service, "-n", &ns])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map_err(|e| format!("清理失败: {}", e))?;
 
@@ -531,6 +535,7 @@ pub async fn recover_service(
         let kubectl_bin = find_bin("kubectl");
         let _ = Command::new(&kubectl_bin)
             .args(["annotate", "svc", &service, "kt-selector-", "-n", &ns])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
 
         Ok(format!("服务 {} 的残留会话已清理", service))

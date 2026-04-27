@@ -195,24 +195,37 @@ pub fn spawn_cli(bin: &str, args: &[&str]) -> std::io::Result<std::process::Chil
 /// macOS/Linux: uses `which`. Windows: uses `where`.
 pub fn check_bin_in_path(name: &str) -> (bool, String) {
     #[cfg(target_os = "windows")]
-    let checker = "where";
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let result = Command::new("where")
+            .arg(name)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        let exists = result.as_ref().map(|o| o.status.success()).unwrap_or(false);
+        let path = result.ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        (exists, path)
+    }
     #[cfg(not(target_os = "windows"))]
-    let checker = "which";
-
-    let result = Command::new(checker).arg(name).output();
-    let exists = result.as_ref().map(|o| o.status.success()).unwrap_or(false);
-    let path = result.ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-    (exists, path)
+    {
+        let result = Command::new("which").arg(name).output();
+        let exists = result.as_ref().map(|o| o.status.success()).unwrap_or(false);
+        let path = result.ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        (exists, path)
+    }
 }
 
 /// Check if a process is alive by PID (cross-platform).
 pub fn is_process_alive(pid: u32) -> bool {
     #[cfg(target_os = "windows")]
     {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         Command::new("tasklist")
             .args(["/FI", &format!("PID eq {}", pid), "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map(|o| {
                 let stdout = String::from_utf8_lossy(&o.stdout);
