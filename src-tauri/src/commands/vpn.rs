@@ -1,15 +1,43 @@
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
-use tauri_plugin_opener::OpenerExt;
+use std::process::Command;
 use crate::utils::{find_bin, run_cli, spawn_cli, check_bin_in_path};
 
-/// Open a URL in the system browser from the Rust side.
-/// This bypasses the frontend opener plugin's scope restrictions.
+/// Open a URL in the system default browser using OS-native commands.
+/// This completely bypasses the Tauri opener plugin (which has glob scope
+/// issues where `*` doesn't match `/` in URL paths).
 #[tauri::command]
-pub async fn open_auth_url(app: AppHandle, url: String) -> Result<(), String> {
-    app.opener()
-        .open_url(&url, None::<&str>)
-        .map_err(|e| format!("Failed to open browser: {}", e))
+pub async fn open_auth_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: `cmd /c start` reliably opens URLs in default browser.
+        // The empty "" before the URL is needed when the URL contains special chars.
+        #[cfg(target_os = "windows")]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
