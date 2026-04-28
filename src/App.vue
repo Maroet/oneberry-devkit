@@ -105,6 +105,7 @@ const route = useRoute()
 const store = useAppStore()
 
 const isConnecting = ref(false)
+const isWindows = navigator.platform.startsWith('Win')
 
 // Check environment status on startup + periodic refresh
 onMounted(async () => {
@@ -229,16 +230,29 @@ async function toggleEnvironment(val: boolean) {
       const res = await store.connectVpn()
       store.addSystemLog(`VPN Cmd: ${res}`)
       
-      // If the backend already detected an auth URL, open it immediately
+      // If the backend detected an auth URL, try to open it
       if (res && res.startsWith('AUTH_REQUIRED:')) {
-        const authUrl = res.substring('AUTH_REQUIRED:'.length)
-        store.addSystemLog(`-> Auth required. Opening browser...`)
-        authOpened = true
-        try {
-          await invoke('open_auth_url', { url: authUrl })
-        } catch (e) {
-          store.addSystemLog(`Failed to open browser: ${e}`)
+        const authUrl = res.substring('AUTH_REQUIRED:'.length).trim()
+        if (authUrl) {
+          // Got a valid auth URL — open browser
+          store.addSystemLog(`-> Auth required. Opening browser: ${authUrl}`)
+          authOpened = true
+          try {
+            await invoke('open_auth_url', { url: authUrl })
+          } catch (e) {
+            store.addSystemLog(`Failed to open browser: ${e}`)
+          }
+        } else if (isWindows) {
+          // Empty auth URL on Windows — Tailscale Service handles auth via GUI
+          store.addSystemLog('-> Auth required but no URL available (Windows Service mode)')
+          authOpened = true
+          dialog.info({
+            title: '需要完成 VPN 认证',
+            content: '请在系统托盘中找到 Tailscale 图标，右键点击并选择「Log in」完成登录认证。\n\n认证完成后，本应用将自动检测连接状态。',
+            positiveText: '知道了',
+          })
         }
+        // On macOS: auth URL will appear in a later poll cycle, so just wait
       }
     } catch (e) {
       store.addSystemLog(`VPN Error: ${e}`)
@@ -261,16 +275,25 @@ async function toggleEnvironment(val: boolean) {
         store.addSystemLog('-> Sync Complete')
       }
       
-      if ((store.vpn.status === 'needs_login' || store.vpn.status === 'needs_auth') && store.vpn.auth_url) {
-        if (!authOpened) {
-          authOpened = true
-          store.addSystemLog(`-> Auth required. Opening browser...`)
+      if ((store.vpn.status === 'needs_login' || store.vpn.status === 'needs_auth') && !authOpened) {
+        authOpened = true
+        const authUrl = store.vpn.auth_url?.trim()
+        if (authUrl) {
+          store.addSystemLog(`-> Auth required. Opening browser: ${authUrl}`)
           try {
-            await invoke('open_auth_url', { url: store.vpn.auth_url })
+            await invoke('open_auth_url', { url: authUrl })
           } catch (e) {
             store.addSystemLog(`Failed to open browser: ${e}`)
           }
+        } else if (isWindows) {
+          store.addSystemLog('-> Auth required, guiding user to Tailscale GUI')
+          dialog.info({
+            title: '需要完成 VPN 认证',
+            content: '请在系统托盘中找到 Tailscale 图标，右键点击并选择「Log in」完成登录认证。\n\n认证完成后，本应用将自动检测连接状态。',
+            positiveText: '知道了',
+          })
         }
+        // On macOS: keep polling, auth URL should appear soon
       }
 
       if (attempts > 30) { 

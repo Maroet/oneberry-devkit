@@ -396,9 +396,8 @@ async function reconnectSession(session: any) {
   }
 }
 
-function removeSession(sessionId: string) {
-  store.sessions = store.sessions.filter(s => s.id !== sessionId)
-  store.sessionLogs.delete(sessionId)
+async function removeSession(sessionId: string) {
+  await store.removeSession(sessionId)
   if (expandedSession.value === sessionId) expandedSession.value = null
 }
 

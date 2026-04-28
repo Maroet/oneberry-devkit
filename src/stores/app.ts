@@ -203,6 +203,20 @@ export const useAppStore = defineStore('app', () => {
 
   async function stopSession(sessionId: string) {
     await safeInvoke<string>('stop_session', { sessionId })
+    // Mark as stopped locally instead of removing — let user choose "reconnect" or "clear"
+    const session = sessions.value.find(s => s.id === sessionId)
+    if (session) {
+      session.status = 'stopped'
+    }
+  }
+
+  async function removeSession(sessionId: string) {
+    // Notify backend to remove from SessionManager (kills process if still alive)
+    try {
+      await safeInvoke<string>('stop_session', { sessionId })
+    } catch {
+      // Session may already be removed on backend — that's fine
+    }
     sessions.value = sessions.value.filter(s => s.id !== sessionId)
     sessionLogs.value.delete(sessionId)
   }
@@ -249,6 +263,7 @@ export const useAppStore = defineStore('app', () => {
     loading, mockMode,
     checkSetup, refreshVpn, connectVpn, disconnectVpn, refreshCluster,
     refreshServices, refreshSessions, startExchange, startMesh, stopSession,
+    removeSession,
     addLogLine, getSessionLogs, markSessionEnded, refreshAll, installTailscale,
     recoverService,
   }

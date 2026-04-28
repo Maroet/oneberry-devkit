@@ -194,31 +194,45 @@ pub async fn check_vpn() -> Result<VpnStatus, String> {
 pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String> {
     let url = headscale_url.unwrap_or_else(|| "https://vpn.oneberry.cc:31443".to_string());
 
-    // Use spawn_cli() — `tailscale up` blocks waiting for OIDC auth.
-    // Fire-and-forget, then let the frontend poll status for auth_url.
     let bin = find_bin("tailscale");
+
+    // Fire-and-forget: `tailscale up` blocks waiting for OIDC auth on macOS/Linux.
+    // On Windows, it tells the Tailscale Service to initiate the connection.
     let _child = spawn_cli(&bin, &["up", "--login-server", &url, "--accept-routes", "--reset"])
         .map_err(|e| format!("启动 Tailscale 失败: {}", e))?;
 
-    // Wait a moment for tailscale to register the login request
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    // Poll status a few times — on Windows the Service may take a moment to respond.
+    for i in 0..3 {
+        tokio::time::sleep(std::time::Duration::from_secs(if i == 0 { 3 } else { 2 })).await;
 
-    // Check status to see if we already got an auth URL
-    let status = check_vpn().await.unwrap_or(VpnStatus {
-        status: "disconnected".to_string(),
-        auth_url: None,
-        ip: None,
-        hostname: None,
-        debug_info: None,
-    });
+        let status = check_vpn().await.unwrap_or(VpnStatus {
+            status: "disconnected".to_string(),
+            auth_url: None,
+            ip: None,
+            hostname: None,
+            debug_info: None,
+        });
 
-    if let Some(ref auth) = status.auth_url {
-        Ok(format!("AUTH_REQUIRED:{}", auth))
-    } else if status.status == "connected" {
-        Ok("VPN 已连接".to_string())
-    } else {
-        Ok("VPN 连接请求已发送，正在等待认证...".to_string())
+        if status.status == "connected" {
+            return Ok("VPN 已连接".to_string());
+        }
+
+        // Auth URL found — return it immediately
+        if let Some(ref auth) = status.auth_url {
+            if !auth.is_empty() {
+                return Ok(format!("AUTH_REQUIRED:{}", auth));
+            }
+        }
+
+        // Backend says NeedsLogin but no URL — common on Windows.
+        // Signal AUTH_REQUIRED with empty URL so frontend can guide user.
+        if status.status == "needs_login" || status.status == "needs_auth" {
+            return Ok(format!("AUTH_REQUIRED:{}", status.auth_url.unwrap_or_default()));
+        }
     }
+
+    // Fallback — connection in progress but no clear result yet
+    Ok("VPN 连接请求已发送，正在等待认证...".to_string())
 }
 
 #[tauri::command]
