@@ -59,7 +59,9 @@ mirror-to-github:
 # -----------------------------------------------------------------------------
 fetch-github-release:
   stage: fetch-release
-  image: image.hm.metavarse.tech:9443/hongmei-dev/alpine:latest
+  image:
+    name: image.hm.metavarse.tech:9443/hongmei-dev/alpine/git:latest
+    entrypoint: [""]
   needs: [mirror-to-github]
   variables:
     POLL_INTERVAL: "30"
