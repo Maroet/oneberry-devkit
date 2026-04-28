@@ -2,7 +2,7 @@ mod commands;
 mod services;
 pub mod utils;
 
-use commands::{vpn, cluster, session, setup};
+use commands::{vpn, cluster, session, setup, dns};
 use commands::session::SessionManager;
 use services::health_monitor::HealthMonitor;
 use std::sync::Arc;
@@ -73,6 +73,8 @@ pub fn run() {
             setup::install_tailscale,
             setup::get_config,
             setup::save_config,
+            dns::setup_cluster_dns,
+            dns::check_cluster_dns,
         ])
         .setup(|app| {
             // Auto-deploy kubeconfig if not present

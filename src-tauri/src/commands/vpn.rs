@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use crate::utils::{find_bin, run_cli, spawn_cli, check_bin_in_path};
+use super::dns;
 
 /// Open a URL in the system default browser using OS-native commands.
 /// This completely bypasses the Tauri opener plugin (which has glob scope
@@ -214,6 +215,10 @@ pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String
         });
 
         if status.status == "connected" {
+            // VPN connected — auto-configure DNS for .cluster.local resolution
+            if let Err(e) = dns::ensure_cluster_dns() {
+                eprintln!("[DevKit] DNS 配置失败（非致命）: {}", e);
+            }
             return Ok("VPN 已连接".to_string());
         }
 
@@ -237,6 +242,12 @@ pub async fn connect_vpn(headscale_url: Option<String>) -> Result<String, String
 
 #[tauri::command]
 pub async fn disconnect_vpn() -> Result<String, String> {
+    // Clean up cluster DNS before disconnecting
+    // (CoreDNS will be unreachable after VPN is down)
+    if let Err(e) = dns::remove_cluster_dns() {
+        eprintln!("[DevKit] DNS 清理失败（非致命）: {}", e);
+    }
+
     // Use spawn_cli() — `tailscale down` can take 30s+ via output(),
     // but the actual disconnect happens instantly. Fire-and-forget.
     let bin = find_bin("tailscale");
