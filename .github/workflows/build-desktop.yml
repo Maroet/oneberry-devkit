@@ -1,0 +1,114 @@
+name: Build Desktop App
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: '构建平台 (all / windows / macos)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - windows
+          - macos
+      ref_tag:
+        description: 'Tag 名称 (用于 Release 标题)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # -------------------------------------------------------
+  # Step 1: 根据平台选择动态生成构建矩阵
+  # -------------------------------------------------------
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      version: ${{ steps.set-version.outputs.version }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          PLATFORMS="${{ inputs.platforms }}"
+          if [ -z "$PLATFORMS" ] || [ "$PLATFORMS" = "all" ]; then
+            echo 'matrix={"include":[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","name":"macOS-arm64"},{"platform":"macos-13","args":"--target x86_64-apple-darwin","name":"macOS-x64"},{"platform":"windows-latest","args":"","name":"Windows-x64"}]}' >> "$GITHUB_OUTPUT"
+          elif [ "$PLATFORMS" = "macos" ]; then
+            echo 'matrix={"include":[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","name":"macOS-arm64"},{"platform":"macos-13","args":"--target x86_64-apple-darwin","name":"macOS-x64"}]}' >> "$GITHUB_OUTPUT"
+          elif [ "$PLATFORMS" = "windows" ]; then
+            echo 'matrix={"include":[{"platform":"windows-latest","args":"","name":"Windows-x64"}]}' >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: set-version
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.ref_tag }}" ]; then
+            echo "version=${{ inputs.ref_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+  # -------------------------------------------------------
+  # Step 2: 跨平台构建
+  # -------------------------------------------------------
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.setup.outputs.version }}
+          releaseName: "OneBerry DevKit ${{ needs.setup.outputs.version }}"
+          releaseBody: "自动构建 ${{ needs.setup.outputs.version }}"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devkit-${{ matrix.name }}
+          path: |
+            src-tauri/target/*/release/bundle/dmg/*.dmg
+            src-tauri/target/*/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe.sig
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/msi/*.msi.sig

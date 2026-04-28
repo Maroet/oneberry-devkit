@@ -10,6 +10,8 @@
     "shell:allow-spawn",
     "shell:allow-stdin-write",
     "core:event:default",
+    "updater:default",
+    "process:allow-restart",
     {
       "identifier": "shell:allow-execute",
       "allow": [

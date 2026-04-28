@@ -50,7 +50,13 @@
               </div>
               <div class="version-badge mt-4" style="display: flex; flex-direction: column; gap: 4px;">
                 <span v-if="store.mockMode" class="badge mock" style="display: flex; align-items: center; gap: 4px;"><n-icon :component="Beaker" /> Mock Mode</span>
-                <span>v0.1.0</span>
+                <span @click="updater.state.value === 'available' ? showUpdateDialog() : updater.checkForUpdates()" style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                  v0.1.0
+                  <span v-if="updater.state.value === 'available'" class="update-dot" title="有新版本可用"></span>
+                </span>
+                <span v-if="updater.state.value === 'available'" class="update-hint" @click="showUpdateDialog()">
+                  🆕 v{{ updater.newVersion.value }} 可用
+                </span>
               </div>
             </div>
           </aside>
@@ -83,6 +89,72 @@
             </main>
         </div>
 
+        <!-- Update Toast -->
+        <div v-if="updater.state.value !== 'idle' && updater.state.value !== 'checking' && !updater.dismissed.value" class="update-toast">
+          <!-- 有更新可用 -->
+          <template v-if="updater.state.value === 'available'">
+            <div class="update-toast-content">
+              <n-icon size="18" :component="ArrowUpCircle" color="#10b981" />
+              <div class="update-text">
+                <span class="update-title">发现新版本 v{{ updater.newVersion.value }}</span>
+              </div>
+            </div>
+            <div class="update-actions">
+              <n-button size="small" type="primary" @click="updater.installUpdate()">
+                <template #icon><n-icon :component="Download" /></template>
+                立即更新
+              </n-button>
+              <n-button size="small" quaternary @click="updater.dismiss()">
+                <template #icon><n-icon :component="X" /></template>
+              </n-button>
+            </div>
+          </template>
+
+          <!-- 下载中 -->
+          <template v-if="updater.state.value === 'downloading'">
+            <div class="update-toast-content">
+              <n-icon size="18" :component="RefreshCw" class="update-icon-spin" color="var(--primary-color)" />
+              <div class="update-text">
+                <span class="update-title">正在下载更新...</span>
+                <span class="update-subtitle">{{ downloadedMB }} / {{ totalMB }} MB ({{ progressPercent }}%)</span>
+              </div>
+            </div>
+            <n-progress
+              type="line"
+              :percentage="progressPercent"
+              :show-indicator="false"
+              :height="4"
+              style="margin-top: 8px;"
+            />
+          </template>
+
+          <!-- 安装中 -->
+          <template v-if="updater.state.value === 'installing'">
+            <div class="update-toast-content">
+              <n-icon size="18" :component="RefreshCw" class="update-icon-spin" color="var(--primary-color)" />
+              <div class="update-text">
+                <span class="update-title">正在安装，即将重启...</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- 错误 -->
+          <template v-if="updater.state.value === 'error'">
+            <div class="update-toast-content">
+              <n-icon size="18" :component="AlertCircle" color="var(--error)" />
+              <div class="update-text">
+                <span class="update-title">更新失败</span>
+                <span class="update-subtitle">{{ updater.errorMsg.value }}</span>
+              </div>
+            </div>
+            <div class="update-actions">
+              <n-button size="small" quaternary @click="updater.dismiss()">
+                <template #icon><n-icon :component="X" /></template>
+              </n-button>
+            </div>
+          </template>
+        </div>
+
         </div>
         </n-dialog-provider>
       </n-notification-provider>
@@ -91,14 +163,27 @@
 </template>
 
 <script setup lang="ts">
-import { zhCN, dateZhCN, createDiscreteApi, NIcon } from 'naive-ui'
-import { Hexagon, LayoutDashboard, Settings as SettingsIcon, Beaker, ScrollText } from 'lucide-vue-next'
+import { zhCN, dateZhCN, createDiscreteApi, NIcon, NButton, NProgress } from 'naive-ui'
+import { Hexagon, LayoutDashboard, Settings as SettingsIcon, Beaker, ScrollText, ArrowUpCircle, Download, X, RefreshCw, AlertCircle } from 'lucide-vue-next'
 import { useRouter, useRoute } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from './stores/app'
+import { useUpdater } from './composables/useUpdater'
 
 const { message, dialog } = createDiscreteApi(['message', 'dialog'])
+const updater = useUpdater()
+
+const progressPercent = computed(() =>
+  updater.totalSize.value > 0 ? Math.round((updater.downloadProgress.value / updater.totalSize.value) * 100) : 0
+)
+const downloadedMB = computed(() => (updater.downloadProgress.value / 1024 / 1024).toFixed(1))
+const totalMB = computed(() => (updater.totalSize.value / 1024 / 1024).toFixed(1))
+
+function showUpdateDialog() {
+  // Clicking the version badge with available update just ensures the toast is visible
+  updater.dismissed.value = false
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -494,4 +579,88 @@ async function toggleEnvironment(val: boolean) {
 .status-dot.yellow { background: var(--warning); }
 .status-dot.red { background: var(--error); box-shadow: 0 0 6px var(--error); }
 .status-dot.gray { background: var(--text-muted); }
+
+/* Update indicator */
+.update-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  animation: pulse 2s infinite;
+}
+
+.update-hint {
+  font-size: 11px;
+  color: #10b981;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.update-hint:hover {
+  text-decoration: underline;
+}
+
+/* Update Toast */
+.update-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 320px;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  -webkit-app-region: no-drag;
+}
+
+.update-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.update-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.update-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.update-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.update-icon-spin {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 </style>
