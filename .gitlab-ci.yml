@@ -102,10 +102,8 @@ fetch-github-release:
         # 2. 增量下载新出现的 Release Assets
         RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
           "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
-        ASSET_LIST=$(echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null || true)
-        for entry in $ASSET_LIST; do
-          ASSET_ID=$(echo "$entry" | cut -d'|' -f1)
-          ASSET_NAME=$(echo "$entry" | cut -d'|' -f2)
+        echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null | while IFS='|' read -r ASSET_ID ASSET_NAME; do
+          [ -z "$ASSET_ID" ] && continue
           if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
             echo "  ↓ 新产物: ${ASSET_NAME}"
             curl -sL -o "./release-assets/${ASSET_NAME}" \
@@ -140,10 +138,8 @@ fetch-github-release:
     - |
       RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
         "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
-      ASSET_LIST=$(echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null || true)
-      for entry in $ASSET_LIST; do
-        ASSET_ID=$(echo "$entry" | cut -d'|' -f1)
-        ASSET_NAME=$(echo "$entry" | cut -d'|' -f2)
+      echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null | while IFS='|' read -r ASSET_ID ASSET_NAME; do
+        [ -z "$ASSET_ID" ] && continue
         if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
           echo "  ↓ 补下载: ${ASSET_NAME}"
           curl -sL -o "./release-assets/${ASSET_NAME}" \
@@ -161,8 +157,9 @@ fetch-github-release:
       echo "📤 上传到 GitLab Package Registry..."
       for file in ./release-assets/*; do
         FILENAME=$(basename "$file")
+        ENCODED_FILENAME=$(printf '%s' "$FILENAME" | jq -sRr @uri)
         echo "  ↑ ${FILENAME}"
-        curl -s -o /dev/null -w "  HTTP %{http_code}\n" --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" --upload-file "$file" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/oneberry-devkit/${TAG}/${FILENAME}"
+        curl -s -o /dev/null -w "  HTTP %{http_code}\n" --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" --upload-file "$file" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/oneberry-devkit/${TAG}/${ENCODED_FILENAME}"
       done
     - echo "✅ 完成！查看 ${CI_PROJECT_URL}/-/packages"
   artifacts:
