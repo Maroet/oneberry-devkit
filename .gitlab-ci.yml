@@ -209,12 +209,10 @@ update-manifest:
 
       SIG_WIN=$(get_sig 'setup\.exe\.sig$')
       SIG_MAC_ARM=$(get_sig 'aarch64\.app\.tar\.gz\.sig$')
-      SIG_MAC_X64=$(get_sig '_x64\.app\.tar\.gz\.sig$')
 
       # 获取实际的安装包文件名 (用于 updater 下载)
       WIN_FILE=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("setup\\.exe$")) | .name' | head -1)
       MAC_ARM_FILE=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("aarch64\\.app\\.tar\\.gz$")) | .name' | head -1)
-      MAC_X64_FILE=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("_x64\\.app\\.tar\\.gz$")) | .name' | head -1)
 
     # 构建 update.json
     - |
@@ -230,10 +228,7 @@ update-manifest:
         echo "  ✅ darwin-aarch64"
       fi
 
-      if [ -n "$SIG_MAC_X64" ] && [ -n "$MAC_X64_FILE" ]; then
-        PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "${PKG_BASE}/${MAC_X64_FILE}" --arg sig "$SIG_MAC_X64" '. + {"darwin-x86_64": {"url": $url, "signature": $sig}}')
-        echo "  ✅ darwin-x86_64"
-      fi
+
 
       PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
       jq -n --arg v "$VERSION" --arg d "$PUB_DATE" --argjson p "$PLATFORMS" \

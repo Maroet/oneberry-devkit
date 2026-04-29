@@ -36,9 +36,9 @@ jobs:
         run: |
           PLATFORMS="${{ inputs.platforms }}"
           if [ -z "$PLATFORMS" ] || [ "$PLATFORMS" = "all" ]; then
-            echo 'matrix={"include":[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","name":"macOS-arm64"},{"platform":"macos-13","args":"--target x86_64-apple-darwin","name":"macOS-x64"},{"platform":"windows-latest","args":"","name":"Windows-x64"}]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","name":"macOS-arm64"},{"platform":"windows-latest","args":"","name":"Windows-x64"}]}' >> "$GITHUB_OUTPUT"
           elif [ "$PLATFORMS" = "macos" ]; then
-            echo 'matrix={"include":[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","name":"macOS-arm64"},{"platform":"macos-13","args":"--target x86_64-apple-darwin","name":"macOS-x64"}]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[{"platform":"macos-latest","args":"--target aarch64-apple-darwin","name":"macOS-arm64"}]}' >> "$GITHUB_OUTPUT"
           elif [ "$PLATFORMS" = "windows" ]; then
             echo 'matrix={"include":[{"platform":"windows-latest","args":"","name":"Windows-x64"}]}' >> "$GITHUB_OUTPUT"
           fi
@@ -74,7 +74,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
