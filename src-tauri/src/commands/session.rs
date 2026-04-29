@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{AppHandle, Emitter};
 use crate::utils::{find_bin, is_process_alive};
+use crate::commands::setup::AppConfig;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SessionInfo {
@@ -157,6 +158,20 @@ fn build_ktctl_command(args: &[&str]) -> Command {
         cmd.arg(&ktctl_bin).args(args);
         cmd
     }
+}
+
+/// Load the user's AppConfig (shadow_image, shadow_node, etc.) from disk.
+fn load_config() -> AppConfig {
+    let home = dirs_next::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let path = home.join(".oneberry").join("config.json");
+    if path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Ok(cfg) = serde_json::from_str::<AppConfig>(&content) {
+                return cfg;
+            }
+        }
+    }
+    AppConfig::default()
 }
 
 /// Spawn a session and stream its logs to the frontend via Tauri events.
@@ -398,7 +413,8 @@ pub async fn start_exchange(
         status: "starting".to_string(),
     };
 
-    let args = vec![
+    let config = load_config();
+    let mut args = vec![
         "exchange".to_string(),
         service,
         "--expose".to_string(),
@@ -406,6 +422,15 @@ pub async fn start_exchange(
         "-n".to_string(),
         ns,
     ];
+    // Use configured shadow image instead of ktctl's built-in default (public Alibaba Cloud registry)
+    if !config.shadow_image.is_empty() {
+        args.push("--image".to_string());
+        args.push(config.shadow_image);
+    }
+    if !config.shadow_node.is_empty() {
+        args.push("--nodeSelector".to_string());
+        args.push(format!("kubernetes.io/hostname={}", config.shadow_node));
+    }
 
     spawn_session(&app, manager.inner().clone(), info, args)
 }
@@ -441,7 +466,8 @@ pub async fn start_mesh(
         status: "starting".to_string(),
     };
 
-    let args = vec![
+    let config = load_config();
+    let mut args = vec![
         "mesh".to_string(),
         service,
         "--expose".to_string(),
@@ -451,6 +477,15 @@ pub async fn start_mesh(
         "-n".to_string(),
         ns,
     ];
+    // Use configured shadow image instead of ktctl's built-in default (public Alibaba Cloud registry)
+    if !config.shadow_image.is_empty() {
+        args.push("--image".to_string());
+        args.push(config.shadow_image);
+    }
+    if !config.shadow_node.is_empty() {
+        args.push("--nodeSelector".to_string());
+        args.push(format!("kubernetes.io/hostname={}", config.shadow_node));
+    }
 
     spawn_session(&app, manager.inner().clone(), info, args)
 }

@@ -10,13 +10,17 @@ spec:
 
 ---
 # =============================================================================
-# GitLab CI: 镜像代码到 GitHub 并拉取构建产物
+# GitLab CI: 镜像代码到 GitHub 并触发构建
 # =============================================================================
 #
+# 流程:
+#   1. CI 自动: 推送代码和 tag 到 GitHub，触发 GitHub Actions 构建
+#   2. 手动操作: GitHub 构建完成后，在本地运行 scripts/manual-release.sh
+#      下载产物 → 上传 Package Registry → 生成 update.json → 触发客户端更新
+#
 # 需要配置的 CI/CD 变量 (Settings → CI/CD → Variables):
-#   - GITHUB_TOKEN:      GitHub Personal Access Token (需要 Contents + Actions 权限)
-#   - GITHUB_REPO:       GitHub 仓库路径，如 Maroet/oneberry-devkit
-#   - GITLAB_API_TOKEN:  GitLab API Token (需要 api 权限，用于上传到 Package Registry)
+#   - GITHUB_TOKEN:  GitHub Personal Access Token (需要 Contents + Actions 权限)
+#   - GITHUB_REPO:   GitHub 仓库路径，如 Maroet/oneberry-devkit
 # =============================================================================
 
 workflow:
@@ -25,11 +29,13 @@ workflow:
 
 stages:
   - mirror
-  - fetch-release
-  - update-manifest
 
 # -----------------------------------------------------------------------------
-# Stage 1: 推送代码到 GitHub 并通过 API 触发构建
+# 推送代码到 GitHub 并通过 API 触发构建
+# -----------------------------------------------------------------------------
+# 构建完成后，请在本地执行:
+#   ./scripts/manual-release.sh <tag>
+# 或者使用 SKIP_DOWNLOAD=1 模式手动下载后发布
 # -----------------------------------------------------------------------------
 mirror-to-github:
   stage: mirror
@@ -53,192 +59,8 @@ mirror-to-github:
       -H "Accept: application/vnd.github.v3+json"
       "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/build-desktop.yml/dispatches"
       -d "{\"ref\":\"${CI_COMMIT_TAG}\",\"inputs\":{\"platforms\":\"$[[ inputs.build_platforms ]]\",\"ref_tag\":\"${CI_COMMIT_TAG}\"}}"
-
-# -----------------------------------------------------------------------------
-# Stage 2: 等待 GitHub 构建完成，下载产物，上传到 GitLab Package Registry
-# -----------------------------------------------------------------------------
-fetch-github-release:
-  stage: fetch-release
-  image:
-    name: image.hm.metavarse.tech:9443/hongmei-dev/alpine/git:latest
-    entrypoint: [""]
-  needs: [mirror-to-github]
-  timeout: 2h
-  variables:
-    POLL_INTERVAL: "30"
-    MAX_ATTEMPTS: "90"
-  before_script:
-    - apk add --no-cache curl jq
-  script:
-    - TAG="${CI_COMMIT_TAG}"
-    - mkdir -p ./release-assets
-    - touch ./downloaded_ids
-    - echo "⏳ 等待 GitHub Actions 构建完成 (平台 $[[ inputs.build_platforms ]])..."
-
-    # 下载辅助函数 (写入临时文件避免子shell问题)
-    # 只下载 updater 必须的文件 (.tar.gz, .sig, .exe)，跳过 .dmg 和 latest.json
-    - |
-      download_new_assets() {
-        RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-          "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
-        echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null > /tmp/asset_list.txt || true
-        while IFS='|' read -r ASSET_ID ASSET_NAME; do
-          [ -z "$ASSET_ID" ] && continue
-          # 过滤：只下载 updater 需要的文件
-          case "$ASSET_NAME" in
-            *.app.tar.gz|*.app.tar.gz.sig|*-setup.exe|*-setup.exe.sig) ;;
-            *) continue ;;
-          esac
-          if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
-            echo "  ↓ 下载: ${ASSET_NAME}"
-            curl -sL -o "./release-assets/${ASSET_NAME}" \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Accept: application/octet-stream" \
-              "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}"
-            echo "${ASSET_ID}" >> ./downloaded_ids
-          fi
-        done < /tmp/asset_list.txt
-      }
-
-    # 轮询 workflow run 状态，同时增量下载已就绪的产物
-    - |
-      RUN_STATUS=""
-      RUN_CONCLUSION=""
-      ATTEMPT=0
-      while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; do
-        ATTEMPT=$((ATTEMPT + 1))
-
-        RUNS_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-          "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/build-desktop.yml/runs?per_page=5&event=workflow_dispatch")
-        RUN_JSON=$(echo "$RUNS_JSON" | jq -r --arg tag "$TAG" '[.workflow_runs[] | select(.head_branch == $tag)] | first // empty')
-
-        if [ -z "$RUN_JSON" ] || [ "$RUN_JSON" = "null" ]; then
-          echo "[${ATTEMPT}/${MAX_ATTEMPTS}] Workflow 尚未启动..."
-          sleep ${POLL_INTERVAL}
-          continue
-        fi
-
-        RUN_ID=$(echo "$RUN_JSON" | jq -r '.id')
-        RUN_STATUS=$(echo "$RUN_JSON" | jq -r '.status')
-        RUN_CONCLUSION=$(echo "$RUN_JSON" | jq -r '.conclusion // "pending"')
-        DOWNLOADED=$(wc -l < ./downloaded_ids | tr -d ' ')
-        echo "[${ATTEMPT}/${MAX_ATTEMPTS}] Run #${RUN_ID}: ${RUN_STATUS}/${RUN_CONCLUSION} | 已下载: ${DOWNLOADED} 个产物"
-
-        download_new_assets
-
-        if [ "$RUN_STATUS" = "completed" ]; then
-          if [ "$RUN_CONCLUSION" = "success" ]; then
-            echo "✅ 所有构建任务完成！最终确认下载..."
-            download_new_assets
-            break
-          else
-            echo "❌ 构建失败 (conclusion: ${RUN_CONCLUSION})"
-            exit 1
-          fi
-        fi
-
-        sleep ${POLL_INTERVAL}
-      done
-
-    - |
-      if [ "$RUN_STATUS" != "completed" ]; then
-        echo "❌ 超时，构建未完成"
-        exit 1
-      fi
-
-    - ls -lh ./release-assets/
-
-    # 上传到 GitLab Package Registry
-    - |
-      echo "📤 上传到 GitLab Package Registry..."
-      for file in ./release-assets/*; do
-        FILENAME=$(basename "$file")
-        ENCODED_FILENAME=$(printf '%s' "$FILENAME" | jq -sRr @uri)
-        echo "  ↑ ${FILENAME}"
-        curl -s -o /dev/null -w "  HTTP %{http_code}\n" --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" --upload-file "$file" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/oneberry-devkit/${TAG}/${ENCODED_FILENAME}"
-      done
-    - echo "✅ 完成！查看 ${CI_PROJECT_URL}/-/packages"
-  artifacts:
-    paths:
-      - release-assets/
-
-# -----------------------------------------------------------------------------
-# Stage 3: 生成 update.json 并推送到仓库
-# -----------------------------------------------------------------------------
-update-manifest:
-  stage: update-manifest
-  image:
-    name: image.hm.metavarse.tech:9443/hongmei-dev/alpine/git:latest
-    entrypoint: [""]
-  needs: [fetch-github-release]
-  before_script:
-    - apk add --no-cache curl jq
-  script:
-    - TAG="${CI_COMMIT_TAG}"
-    - VERSION="${TAG#v}"
-    - echo "📝 生成 update.json (版本 ${VERSION})..."
-
-    # 从 GitHub Release 获取签名文件内容
-    - |
-      RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-        "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
-
-      echo "📋 Release assets:"
-      echo "$RELEASE_JSON" | jq -r '.assets[]? | .name' 2>/dev/null || echo "  (无 assets)"
-
-      # 获取各平台的 .sig 签名
-      get_sig() {
-        local pattern="$1"
-        local sig_url=$(echo "$RELEASE_JSON" | jq -r --arg p "$pattern" '.assets[] | select(.name | test($p)) | .browser_download_url' | head -1)
-        if [ -n "$sig_url" ] && [ "$sig_url" != "null" ]; then
-          curl -sL -H "Authorization: token ${GITHUB_TOKEN}" "$sig_url"
-        else
-          echo ""
-        fi
-      }
-
-      # 获取各平台的下载 URL (从 GitLab Package Registry)
-      PKG_BASE="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/oneberry-devkit/${TAG}"
-
-      SIG_WIN=$(get_sig 'setup\.exe\.sig$')
-      SIG_MAC_ARM=$(get_sig 'aarch64\.app\.tar\.gz\.sig$')
-
-      # 获取实际的安装包文件名 (用于 updater 下载)
-      WIN_FILE=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("setup\\.exe$")) | .name' | head -1)
-      MAC_ARM_FILE=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("aarch64\\.app\\.tar\\.gz$")) | .name' | head -1)
-
-    # 构建 update.json
-    - |
-      PLATFORMS="{}"
-
-      if [ -n "$SIG_WIN" ] && [ -n "$WIN_FILE" ]; then
-        PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "${PKG_BASE}/${WIN_FILE}" --arg sig "$SIG_WIN" '. + {"windows-x86_64": {"url": $url, "signature": $sig}}')
-        echo "  ✅ windows-x86_64"
-      fi
-
-      if [ -n "$SIG_MAC_ARM" ] && [ -n "$MAC_ARM_FILE" ]; then
-        PLATFORMS=$(echo "$PLATFORMS" | jq --arg url "${PKG_BASE}/${MAC_ARM_FILE}" --arg sig "$SIG_MAC_ARM" '. + {"darwin-aarch64": {"url": $url, "signature": $sig}}')
-        echo "  ✅ darwin-aarch64"
-      fi
-
-
-
-      PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-      jq -n --arg v "$VERSION" --arg d "$PUB_DATE" --argjson p "$PLATFORMS" \
-        '{version: $v, notes: ("自动构建 v" + $v), pub_date: $d, platforms: $p}' > update.json
-
-      echo "📄 update.json 内容:"
-      cat update.json
-
-    # 推送 update.json 到 GitLab 仓库
-    - |
-      git config --global user.email "ci@oneberry.com"
-      git config --global user.name "GitLab CI"
-      git clone "${CI_SERVER_URL}/${CI_PROJECT_PATH}.git" repo
-      cp update.json repo/update.json
-      cd repo
-      git remote set-url origin "http://oauth2:${GITLAB_API_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_PATH}.git"
-      git add update.json
-      git commit -m "ci: update update.json for ${TAG}" || echo "No changes"
-      git push origin HEAD:main
-      echo "✅ update.json 已更新并推送"
+    - echo ""
+    - echo "══════════════════════════════════════════════════════"
+    - echo "  GitHub Actions 构建已触发，请等待构建完成后执行:"
+    - echo "  ./scripts/manual-release.sh ${CI_COMMIT_TAG}"
+    - echo "══════════════════════════════════════════════════════"

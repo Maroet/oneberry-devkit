@@ -30,3 +30,8 @@ src-tauri/binaries/ktctl-*
 # Bundled installers
 src-tauri/resources/tailscale-*.pkg
 src-tauri/resources/tailscale-*.msi
+
+# Release script
+.env
+release-assets/
+/release-upload
