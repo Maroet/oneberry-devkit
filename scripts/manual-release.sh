@@ -68,10 +68,19 @@ GITLAB_PROJECT_PATH="${GITLAB_PROJECT_PATH:-hongmei-z/oneberry-devkit}"
 
 # GitLab project ID (通过 API 查询)
 get_project_id() {
-  local encoded
+  local encoded response
   encoded=$(printf '%s' "$GITLAB_PROJECT_PATH" | jq -sRr @uri)
-  curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-    "${GITLAB_HOST}/api/v4/projects/${encoded}" | jq -r '.id'
+  local api_url="${GITLAB_HOST}/api/v4/projects/${encoded}"
+  response=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" "$api_url")
+  local proj_id
+  proj_id=$(echo "$response" | jq -r '.id // empty' 2>/dev/null)
+  if [ -z "$proj_id" ]; then
+    warn "API 请求: $api_url" >&2
+    warn "API 响应: $(echo "$response" | head -c 300)" >&2
+    echo ""
+  else
+    echo "$proj_id"
+  fi
 }
 
 # ── 验证依赖 ──
@@ -94,27 +103,38 @@ if [ "${SKIP_DOWNLOAD:-}" != "1" ]; then
     "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}" \
   ) || fail "未找到 GitHub Release: ${TAG}"
 
-  echo "$RELEASE_JSON" | jq -r '.assets[] | .name' | while read -r name; do
+  # 提取需要下载的文件列表到临时文件 (避免 pipe subshell 问题)
+  ASSET_LIST=$(mktemp)
+  echo "$RELEASE_JSON" | jq -r '.assets[] | "\(.id)|\(.name)|\(.size)"' > "$ASSET_LIST"
+
+  DOWNLOAD_COUNT=0
+  while IFS='|' read -r asset_id name size; do
     # 只下载 updater 需要的文件
     case "$name" in
       *.app.tar.gz|*.app.tar.gz.sig|*-setup.exe|*-setup.exe.sig) ;;
       *) continue ;;
     esac
 
+    size_mb=$(echo "scale=1; $size / 1048576" | bc 2>/dev/null || echo "?")
+
     if [ -f "${ASSET_DIR}/${name}" ]; then
-      info "  跳过 (已存在): ${name}"
+      info "  跳过 (已存在): ${name} (${size_mb}MB)"
       continue
     fi
 
-    asset_id=$(echo "$RELEASE_JSON" | jq -r --arg n "$name" '.assets[] | select(.name == $n) | .id')
-    info "  ↓ 下载: ${name}"
-    curl -sL \
+    info "  ↓ 下载: ${name} (${size_mb}MB)"
+    curl -fL# \
       -H "Authorization: token ${GITHUB_TOKEN}" \
       -H "Accept: application/octet-stream" \
       -o "${ASSET_DIR}/${name}" \
-      "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset_id}"
-  done
-  ok "产物下载完成"
+      "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${asset_id}" \
+      || fail "下载失败: ${name}"
+    ok "    完成: $(ls -lh "${ASSET_DIR}/${name}" | awk '{print $5}')"
+    DOWNLOAD_COUNT=$((DOWNLOAD_COUNT + 1))
+  done < "$ASSET_LIST"
+  rm -f "$ASSET_LIST"
+
+  ok "产物下载完成 (${DOWNLOAD_COUNT} 个文件)"
 else
   info "跳过下载，使用 ${ASSET_DIR} 中的本地文件"
 fi

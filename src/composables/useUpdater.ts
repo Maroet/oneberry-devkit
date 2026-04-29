@@ -4,9 +4,9 @@ import { relaunch } from '@tauri-apps/plugin-process'
 
 export type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'error'
 
-// GitLab Deploy Token (只读权限: read_repository + read_package_registry)
-// 在 GitLab 项目 Settings → Repository → Deploy tokens 中创建
-const GITLAB_DEPLOY_TOKEN = 'gldt-fTWo3LxT-kuau1KVeA6r'
+// GitLab Project Access Token (只读权限: read_api, Reporter 角色)
+// 在 GitLab 项目 Settings → Access Tokens 中创建
+const GITLAB_PROJECT_TOKEN = 'glpat-YXfCU5U3c6cqfhzfn05oXm86MQp1OjNqCA.01.0y1oqydic'
 
 export function useUpdater() {
   const state = ref<UpdateState>('idle')
@@ -25,7 +25,7 @@ export function useUpdater() {
       state.value = 'checking'
       const result = await check({
         headers: {
-          'PRIVATE-TOKEN': GITLAB_DEPLOY_TOKEN,
+          'PRIVATE-TOKEN': GITLAB_PROJECT_TOKEN,
         },
       })
       if (result) {
