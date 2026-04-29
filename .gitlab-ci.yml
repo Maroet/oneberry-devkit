@@ -63,9 +63,10 @@ fetch-github-release:
     name: image.hm.metavarse.tech:9443/hongmei-dev/alpine/git:latest
     entrypoint: [""]
   needs: [mirror-to-github]
+  timeout: 2h
   variables:
     POLL_INTERVAL: "30"
-    MAX_ATTEMPTS: "60"
+    MAX_ATTEMPTS: "90"
   before_script:
     - apk add --no-cache curl jq
   script:
@@ -73,6 +74,25 @@ fetch-github-release:
     - mkdir -p ./release-assets
     - touch ./downloaded_ids
     - echo "⏳ 等待 GitHub Actions 构建完成 (平台 $[[ inputs.build_platforms ]])..."
+
+    # 下载辅助函数 (写入临时文件避免子shell问题)
+    - |
+      download_new_assets() {
+        RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+          "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
+        echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null > /tmp/asset_list.txt || true
+        while IFS='|' read -r ASSET_ID ASSET_NAME; do
+          [ -z "$ASSET_ID" ] && continue
+          if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
+            echo "  ↓ 下载: ${ASSET_NAME}"
+            curl -sL -o "./release-assets/${ASSET_NAME}" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/octet-stream" \
+              "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}"
+            echo "${ASSET_ID}" >> ./downloaded_ids
+          fi
+        done < /tmp/asset_list.txt
+      }
 
     # 轮询 workflow run 状态，同时增量下载已就绪的产物
     - |
@@ -82,7 +102,6 @@ fetch-github-release:
       while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; do
         ATTEMPT=$((ATTEMPT + 1))
 
-        # 1. 检查 workflow run 状态
         RUNS_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
           "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/build-desktop.yml/runs?per_page=5&event=workflow_dispatch")
         RUN_JSON=$(echo "$RUNS_JSON" | jq -r --arg tag "$TAG" '[.workflow_runs[] | select(.head_branch == $tag)] | first // empty')
@@ -99,25 +118,12 @@ fetch-github-release:
         DOWNLOADED=$(wc -l < ./downloaded_ids | tr -d ' ')
         echo "[${ATTEMPT}/${MAX_ATTEMPTS}] Run #${RUN_ID}: ${RUN_STATUS}/${RUN_CONCLUSION} | 已下载: ${DOWNLOADED} 个产物"
 
-        # 2. 增量下载新出现的 Release Assets
-        RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-          "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
-        echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null | while IFS='|' read -r ASSET_ID ASSET_NAME; do
-          [ -z "$ASSET_ID" ] && continue
-          if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
-            echo "  ↓ 新产物: ${ASSET_NAME}"
-            curl -sL -o "./release-assets/${ASSET_NAME}" \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Accept: application/octet-stream" \
-              "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}"
-            echo "${ASSET_ID}" >> ./downloaded_ids
-          fi
-        done
+        download_new_assets
 
-        # 3. 检查是否全部完成
         if [ "$RUN_STATUS" = "completed" ]; then
           if [ "$RUN_CONCLUSION" = "success" ]; then
-            echo "✅ 所有构建任务完成！"
+            echo "✅ 所有构建任务完成！最终确认下载..."
+            download_new_assets
             break
           else
             echo "❌ 构建失败 (conclusion: ${RUN_CONCLUSION})"
@@ -133,22 +139,6 @@ fetch-github-release:
         echo "❌ 超时，构建未完成"
         exit 1
       fi
-
-    # 最终确认：确保最后一批产物也下载了
-    - |
-      RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-        "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${TAG}")
-      echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null | while IFS='|' read -r ASSET_ID ASSET_NAME; do
-        [ -z "$ASSET_ID" ] && continue
-        if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
-          echo "  ↓ 补下载: ${ASSET_NAME}"
-          curl -sL -o "./release-assets/${ASSET_NAME}" \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/octet-stream" \
-            "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}"
-          echo "${ASSET_ID}" >> ./downloaded_ids
-        fi
-      done
 
     - ls -lh ./release-assets/
 
