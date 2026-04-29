@@ -76,6 +76,7 @@ fetch-github-release:
     - echo "⏳ 等待 GitHub Actions 构建完成 (平台 $[[ inputs.build_platforms ]])..."
 
     # 下载辅助函数 (写入临时文件避免子shell问题)
+    # 只下载 updater 必须的文件 (.tar.gz, .sig, .exe)，跳过 .dmg 和 latest.json
     - |
       download_new_assets() {
         RELEASE_JSON=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
@@ -83,6 +84,11 @@ fetch-github-release:
         echo "$RELEASE_JSON" | jq -r '.assets[]? | "\(.id)|\(.name)"' 2>/dev/null > /tmp/asset_list.txt || true
         while IFS='|' read -r ASSET_ID ASSET_NAME; do
           [ -z "$ASSET_ID" ] && continue
+          # 过滤：只下载 updater 需要的文件
+          case "$ASSET_NAME" in
+            *.app.tar.gz|*.app.tar.gz.sig|*-setup.exe|*-setup.exe.sig) ;;
+            *) continue ;;
+          esac
           if ! grep -q "^${ASSET_ID}$" ./downloaded_ids; then
             echo "  ↓ 下载: ${ASSET_NAME}"
             curl -sL -o "./release-assets/${ASSET_NAME}" \
