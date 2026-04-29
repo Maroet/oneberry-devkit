@@ -51,7 +51,7 @@
               <div class="version-badge mt-4" style="display: flex; flex-direction: column; gap: 4px;">
                 <span v-if="store.mockMode" class="badge mock" style="display: flex; align-items: center; gap: 4px;"><n-icon :component="Beaker" /> Mock Mode</span>
                 <span @click="updater.state.value === 'available' ? showUpdateDialog() : updater.checkForUpdates()" style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                  v0.1.0
+                  v{{ appVersion }}
                   <span v-if="updater.state.value === 'available'" class="update-dot" title="有新版本可用"></span>
                 </span>
                 <span v-if="updater.state.value === 'available'" class="update-hint" @click="showUpdateDialog()">
@@ -168,11 +168,15 @@ import { Hexagon, LayoutDashboard, Settings as SettingsIcon, Beaker, ScrollText,
 import { useRouter, useRoute } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import { useAppStore } from './stores/app'
 import { useUpdater } from './composables/useUpdater'
 
 const { message, dialog } = createDiscreteApi(['message', 'dialog'])
 const updater = useUpdater()
+const appVersion = ref('0.0.0')
+
+getVersion().then(v => { appVersion.value = v })
 
 const progressPercent = computed(() =>
   updater.totalSize.value > 0 ? Math.round((updater.downloadProgress.value / updater.totalSize.value) * 100) : 0
