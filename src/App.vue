@@ -166,10 +166,10 @@
 import { zhCN, dateZhCN, createDiscreteApi, NIcon, NButton, NProgress } from 'naive-ui'
 import { Hexagon, LayoutDashboard, Settings as SettingsIcon, Beaker, ScrollText, ArrowUpCircle, Download, X, RefreshCw, AlertCircle } from 'lucide-vue-next'
 import { useRouter, useRoute } from 'vue-router'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getVersion } from '@tauri-apps/api/app'
-import { useAppStore } from './stores/app'
+import { useAppStore, type VpnStatus, type ClusterStatus } from './stores/app'
 import { useUpdater } from './composables/useUpdater'
 
 const { message, dialog } = createDiscreteApi(['message', 'dialog'])
@@ -196,16 +196,51 @@ const store = useAppStore()
 const isConnecting = ref(false)
 const isWindows = navigator.platform.startsWith('Win')
 
-// Check environment status on startup + periodic refresh
+// Check environment status on startup + listen to backend events
+const appCleanups: (() => void)[] = []
+
 onMounted(async () => {
+  // Initial status check
   await store.refreshVpn()
   await store.refreshCluster()
 
-  // Keep status in sync — poll every 15s
-  setInterval(async () => {
-    await store.refreshVpn()
-    await store.refreshCluster()
-  }, 15000)
+  // In Tauri mode, listen to health events from Rust HealthMonitor
+  // instead of polling from the frontend (avoids double polling)
+  if ((window as any).__TAURI_INTERNALS__) {
+    try {
+      const { listen } = await import('@tauri-apps/api/event')
+      const { invoke } = await import('@tauri-apps/api/core')
+
+      // Receive full VPN/Cluster status from HealthMonitor (every 30s)
+      appCleanups.push(await listen<VpnStatus>('health:vpn', (event) => {
+        store.vpn = event.payload
+      }))
+      appCleanups.push(await listen<ClusterStatus>('health:cluster', (event) => {
+        store.cluster = event.payload
+      }))
+
+      // Pause backend polling when window is hidden (minimized / switched away)
+      const handleVisibility = async () => {
+        const isVisible = !document.hidden
+        try {
+          await invoke('set_monitor_active', { active: isVisible })
+        } catch { /* ignore if command not available */ }
+        // Refresh immediately when user comes back
+        if (isVisible) {
+          await store.refreshVpn()
+          await store.refreshCluster()
+        }
+      }
+      document.addEventListener('visibilitychange', handleVisibility)
+      appCleanups.push(() => document.removeEventListener('visibilitychange', handleVisibility))
+    } catch (e) {
+      console.warn('Failed to setup health event listeners:', e)
+    }
+  }
+})
+
+onUnmounted(() => {
+  appCleanups.forEach(fn => fn())
 })
 
 const isEnvConnected = computed(() => {

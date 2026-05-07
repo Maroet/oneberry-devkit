@@ -1,41 +1,41 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use crate::utils::{find_bin, run_cli};
+use crate::commands::{vpn, cluster};
+
+/// Shared flag to pause/resume health polling (e.g. when window is hidden).
+pub struct MonitorActive(pub Arc<AtomicBool>);
 
 pub struct HealthMonitor {
     app: AppHandle,
+    active: Arc<AtomicBool>,
 }
 
 impl HealthMonitor {
-    pub fn new(app: AppHandle) -> Self {
-        HealthMonitor { app }
+    pub fn new(app: AppHandle, active: Arc<AtomicBool>) -> Self {
+        HealthMonitor { app, active }
     }
 
     pub async fn run(&self) {
         loop {
-            // Check VPN
-            let vpn_ok = self.check_vpn().await;
-            let _ = self.app.emit("health:vpn", vpn_ok);
+            if self.active.load(Ordering::Relaxed) {
+                // Reuse the same command logic — emits full status structs
+                if let Ok(status) = vpn::check_vpn().await {
+                    let _ = self.app.emit("health:vpn", &status);
+                }
 
-            // Check cluster
-            let cluster_ok = self.check_cluster().await;
-            let _ = self.app.emit("health:cluster", cluster_ok);
+                if let Ok(status) = cluster::check_cluster().await {
+                    let _ = self.app.emit("health:cluster", &status);
+                }
+            }
 
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
         }
     }
+}
 
-    async fn check_vpn(&self) -> bool {
-        let bin = find_bin("tailscale");
-        run_cli(&bin, &["status"])
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    }
-
-    async fn check_cluster(&self) -> bool {
-        let bin = find_bin("kubectl");
-        run_cli(&bin, &["cluster-info"])
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    }
+#[tauri::command]
+pub fn set_monitor_active(active: bool, state: tauri::State<MonitorActive>) {
+    state.0.store(active, Ordering::Relaxed);
 }

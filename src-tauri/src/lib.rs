@@ -4,8 +4,9 @@ pub mod utils;
 
 use commands::{vpn, cluster, session, setup, dns};
 use commands::session::SessionManager;
-use services::health_monitor::HealthMonitor;
+use services::health_monitor::{HealthMonitor, MonitorActive, set_monitor_active};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// Auto-deploy bundled kubeconfig to ~/.kube/config if not present.
 /// This ensures kubectl works out-of-the-box for new installations.
@@ -49,6 +50,8 @@ fn deploy_kubeconfig(app: &tauri::AppHandle) {
 pub fn run() {
     let session_manager = Arc::new(SessionManager::new());
     let cleanup_manager = session_manager.clone();
+    let monitor_active = Arc::new(AtomicBool::new(true));
+    let monitor_active_for_setup = monitor_active.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -57,6 +60,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(session_manager)
+        .manage(MonitorActive(monitor_active))
         .invoke_handler(tauri::generate_handler![
             vpn::check_vpn,
             vpn::connect_vpn,
@@ -75,6 +79,7 @@ pub fn run() {
             setup::save_config,
             dns::setup_cluster_dns,
             dns::check_cluster_dns,
+            set_monitor_active,
         ])
         .setup(|app| {
             // Auto-deploy kubeconfig if not present
@@ -99,8 +104,9 @@ pub fn run() {
 
             // Start health monitor in background
             let handle = app.handle().clone();
+            let flag = monitor_active_for_setup;
             tauri::async_runtime::spawn(async move {
-                let monitor = HealthMonitor::new(handle);
+                let monitor = HealthMonitor::new(handle, flag);
                 monitor.run().await;
             });
 
