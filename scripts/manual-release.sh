@@ -89,13 +89,19 @@ for cmd in jq curl git; do
 done
 
 ASSET_DIR="${REPO_ROOT}/release-assets"
-mkdir -p "$ASSET_DIR"
 
 # =============================================================================
 # Step 1: 从 GitHub Release 下载产物
 # =============================================================================
 if [ "${SKIP_DOWNLOAD:-}" != "1" ]; then
   [ -z "$GITHUB_TOKEN" ] && fail "请设置 GITHUB_TOKEN 环境变量"
+
+  # 清理旧产物，防止旧版本文件混入
+  if [ -d "$ASSET_DIR" ] && [ "$(find "$ASSET_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')" -gt 0 ]; then
+    warn "清理 release-assets/ 中的旧文件..."
+    rm -f "${ASSET_DIR}"/*
+  fi
+  mkdir -p "$ASSET_DIR"
 
   info "从 GitHub Release 下载 ${TAG} 产物..."
   RELEASE_JSON=$(curl -sf \
@@ -117,11 +123,6 @@ if [ "${SKIP_DOWNLOAD:-}" != "1" ]; then
 
     size_mb=$(echo "scale=1; $size / 1048576" | bc 2>/dev/null || echo "?")
 
-    if [ -f "${ASSET_DIR}/${name}" ]; then
-      info "  跳过 (已存在): ${name} (${size_mb}MB)"
-      continue
-    fi
-
     info "  ↓ 下载: ${name} (${size_mb}MB)"
     curl -fL# \
       -H "Authorization: token ${GITHUB_TOKEN}" \
@@ -136,8 +137,27 @@ if [ "${SKIP_DOWNLOAD:-}" != "1" ]; then
 
   ok "产物下载完成 (${DOWNLOAD_COUNT} 个文件)"
 else
+  mkdir -p "$ASSET_DIR"
   info "跳过下载，使用 ${ASSET_DIR} 中的本地文件"
 fi
+
+# ── 统一文件命名: 给 macOS 产物加上版本号 ──
+# Tauri 构建的 macOS 文件默认不带版本 (e.g. OneBerry.DevKit_aarch64.app.tar.gz)
+# 为了与 Windows 保持一致并便于识别，统一重命名为带版本号的格式
+for file in "${ASSET_DIR}"/*aarch64*.app.tar.gz "${ASSET_DIR}"/*aarch64*.app.tar.gz.sig; do
+  [ ! -f "$file" ] && continue
+  filename=$(basename "$file")
+  # 跳过已经包含版本号的文件
+  if echo "$filename" | grep -q "_${VERSION}_\|_${VERSION}\."; then
+    continue
+  fi
+  # OneBerry.DevKit_aarch64.app.tar.gz → OneBerry.DevKit_0.3.0_aarch64.app.tar.gz
+  new_name=$(echo "$filename" | sed "s/_aarch64/_${VERSION}_aarch64/")
+  if [ "$filename" != "$new_name" ]; then
+    mv "${ASSET_DIR}/${filename}" "${ASSET_DIR}/${new_name}"
+    info "  重命名: ${filename} → ${new_name}"
+  fi
+done
 
 # ── 检查产物 ──
 echo ""
@@ -205,11 +225,11 @@ get_asset_name() {
   [ -n "$file" ] && basename "$file" || echo ""
 }
 
-SIG_WIN=$(get_sig_content "*-setup.exe.sig")
-SIG_MAC_ARM=$(get_sig_content "*aarch64*.app.tar.gz.sig")
+SIG_WIN=$(get_sig_content "*${VERSION}*-setup.exe.sig")
+SIG_MAC_ARM=$(get_sig_content "*${VERSION}*aarch64*.app.tar.gz.sig")
 
-WIN_FILE=$(get_asset_name "*-setup.exe")
-MAC_ARM_FILE=$(get_asset_name "*aarch64*.app.tar.gz")
+WIN_FILE=$(get_asset_name "*${VERSION}*-setup.exe")
+MAC_ARM_FILE=$(get_asset_name "*${VERSION}*aarch64*.app.tar.gz")
 
 PLATFORMS="{}"
 
