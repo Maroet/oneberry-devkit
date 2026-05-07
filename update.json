@@ -1,14 +1,14 @@
 {
-  "version": "0.2.0",
-  "notes": "OneBerry DevKit v0.2.0",
-  "pub_date": "2026-04-29T17:40:24Z",
+  "version": "0.2.2",
+  "notes": "OneBerry DevKit v0.2.2",
+  "pub_date": "2026-05-07T16:08:07Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.0/OneBerry.DevKit_0.2.0_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVVdWa2ltMVBWRDNhUWhOWG5kS0NFRndvUXhScWxHS1p4SnA3YWpaZ1BDYkpKZDU2dFdPZjFuc29Nc0x1UUIzUkVTSk4yZVJCQ3l2Q1NDWmwxeGl4TWdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3NDYxMDcyCWZpbGU6T25lQmVycnkgRGV2S2l0XzAuMi4wX3g2NC1zZXR1cC5leGUKbmFSYUJ0dDZzcEFxZHIxeE0rNlRNWmpRTVBKeXR3NmdkSjRpdkQzdEgrWjAzVHBNVEhWVk9KcWVSOCtLeGpNMkgrU2cxV0ZQcXVZcFBqblF0RXhnQ3c9PQo="
+      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.2/OneBerry.DevKit_0.2.0_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVVNNZmhsWVUyd0pNRGRicFZMQ2dMRkxhcXNRYlVvWEV5K3JDQ2NTYXJBcVhwd1hrR0FxaUYwT05nVGVpMFdtRi9zSWEzV2FwT2src284TWlrYW1FK1FRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MTY5Mjc0CWZpbGU6T25lQmVycnkgRGV2S2l0XzAuMi4yX3g2NC1zZXR1cC5leGUKcWNqTkhML3h0Mi9FN3d2VnE0bzd2TGc1Rzg5djc3ckZuanA4WGJUTFNSYUtMMHYraWFheWpUZXJ6WGlyTGcrVzVGTWI2dHdITkNmVkp3SFovemlKQlE9PQo="
     },
     "darwin-aarch64": {
-      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.0/OneBerry.DevKit_aarch64.app.tar.gz",
+      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.2/OneBerry.DevKit_aarch64.app.tar.gz",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVVNwYWJCbTVWK2J0cXNmb09mQUY5TCtwejcrbG05NEU5RVY2MkIreDhPcWsyYXMwUGxkU0V6UW1NbzZsQnBsQ2RiTGdNSDE5anJyY0FWc2NiSWRJYnc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3NDYwNjc0CWZpbGU6T25lQmVycnkgRGV2S2l0LmFwcC50YXIuZ3oKU3ppTzZVN0xLaFFOZzZVYTZHK0svVWZadFhrcFA2WUN1enZFY0NWWENRdGlTLzhKZkxqR3BIQ3ZlSEJPVGcvcjYva1h0OG9tTjBQZTV6VFI3SExNQUE9PQo="
     }
   }
