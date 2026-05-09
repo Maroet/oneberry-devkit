@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, onMounted, onUnmounted } from 'vue'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 
@@ -10,7 +10,7 @@ const GITLAB_PROJECT_TOKEN = 'glpat-YXfCU5U3c6cqfhzfn05oXm86MQp1OjNqCA.01.0y1oqy
 
 // ── 模块级全局状态 (所有组件共享同一份) ──
 const state = ref<UpdateState>('idle')
-const update = ref<Update | null>(null)
+const update = shallowRef<Update | null>(null)
 const newVersion = ref('')
 const releaseNotes = ref('')
 const downloadProgress = ref(0)
