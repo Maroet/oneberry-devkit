@@ -1,15 +1,15 @@
 {
-  "version": "0.2.5",
-  "notes": "OneBerry DevKit v0.2.5",
-  "pub_date": "2026-05-09T08:11:01Z",
+  "version": "0.2.6",
+  "notes": "OneBerry DevKit v0.2.6",
+  "pub_date": "2026-05-09T09:23:33Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.5/OneBerry.DevKit_0.2.5_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVVdqamVWNVpzdWlmTVVEazhFYTI1OFBZZk9OUWJYZk9JdHRRYm52ZjlCdmsxR1Vkb1p6ekhWZDNCM1JYWEh0TlEwc0lubEFRaEZTYkRQdk1VQXNpaVFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MzEyODM5CWZpbGU6T25lQmVycnkgRGV2S2l0XzAuMi41X3g2NC1zZXR1cC5leGUKR3BlbkRBVldZZ05HTFMrU09OSTlCL0d1aUZLU1hDVTQ1bEFzWk1ldXBFcUlQRWw3ZitmOVZuQ2dzS0VJT0Zwa2RCa3Nmc25mWEIveVpGYWtoS0pHQ3c9PQo="
+      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.6/OneBerry.DevKit_0.2.6_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVVFkOFZqS0NKVHd2bUdtNFpVdjQ0VU4xRU9sZHRteGRjUHRvdXNJS3hYampET1RoL3g1MnZaTk1vVXllU0ozM0Y4ekFPeVU5ZWlrMDVYQ1crYUJNdVE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MzE3MjMwCWZpbGU6T25lQmVycnkgRGV2S2l0XzAuMi42X3g2NC1zZXR1cC5leGUKblA1ZURMYTZVWDUvaTEvNmEwbVAwTmpqKzc5Y3poR21NdTVnMjF6bkIrdzlDVXRaM1d3SWx1YzJPSVU3Ly9KUVNyZTRGTyt3ZVdhamRQREpkdktuQXc9PQo="
     },
     "darwin-aarch64": {
-      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.5/OneBerry.DevKit_0.2.5_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVWR6dkUvRkRiNlFtclluWFJLN0hMUURMWW1kQm1RVFpucUdRbmJlT3VGaXpBRFdrc3JiOHprc1RjVDJRZjdEOVJSdEYyN2JQYzhSMlQ5b2VWRTNTQUFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MzEyNjE0CWZpbGU6T25lQmVycnkgRGV2S2l0LmFwcC50YXIuZ3oKMk51b2REMlBxRklGejhKMEg1V0RLVk0zRlEvRTcyYUxJOFdDcTNQMEt6UGFxOEhSRnJ0bmQyU3ZFTzh2dk95ZndGNWwraFcrRlpONERoblNrTWsxQUE9PQo="
+      "url": "https://gitlab.oneberry.cc:2083/api/v4/projects/67/packages/generic/oneberry-devkit/v0.2.6/OneBerry.DevKit_0.2.6_aarch64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSK3RjRHN1VE5zVVE0TzAvYzdENTJGN1JxWGJaenhkSVI4L3RtVHIvRlE3T254QmRkK1RPN2I3Mm55T2tVN2VoNXhvWGxRbjFqRGFoNkNtZWFpays1OUQwM1VzeXQ1eHdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MzE2OTY0CWZpbGU6T25lQmVycnkgRGV2S2l0LmFwcC50YXIuZ3oKMzN1KzRmZGczaTY5cEx5eDRDTFZmU29McEc5cHBOellEYkVydW1WVWQ3QlhZT053bGZnSkg2VHVJRXd2WE5JWUdNZ20vRUtQV1NjcUpWbmRQa09UQ0E9PQo="
     }
   }
 }
