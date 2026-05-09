@@ -603,3 +603,103 @@ pub async fn recover_service(
         Ok(format!("服务 {} 的残留会话已清理", service))
     }
 }
+
+/// Pre-flight check: detect stale mesh resources for a specific service + version.
+///
+/// Uses kubectl to look for `{service}-kt-mesh-{version}` service and pod.
+/// Returns a JSON object with `has_residue`, `stale_svc`, `stale_pod` fields.
+#[derive(Debug, Serialize, Clone)]
+pub struct MeshResidueInfo {
+    pub has_residue: bool,
+    pub stale_svc: Option<String>,
+    pub stale_pod: Option<String>,
+}
+
+#[tauri::command]
+pub async fn check_mesh_residue(
+    service: String,
+    version: String,
+    namespace: Option<String>,
+) -> Result<MeshResidueInfo, String> {
+    let kubectl_bin = find_bin("kubectl");
+    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let mesh_name = format!("{}-kt-mesh-{}", service, version);
+
+    let mut stale_svc = None;
+    let mut stale_pod = None;
+
+    // Check for stale service
+    let svc_check = run_kubectl(&kubectl_bin, &["get", "svc", &mesh_name, "-n", &ns, "-o", "name"]);
+    if let Ok(output) = svc_check {
+        if output.status.success() {
+            stale_svc = Some(mesh_name.clone());
+        }
+    }
+
+    // Check for stale pod
+    let pod_check = run_kubectl(&kubectl_bin, &["get", "pod", &mesh_name, "-n", &ns, "-o", "name"]);
+    if let Ok(output) = pod_check {
+        if output.status.success() {
+            stale_pod = Some(mesh_name.clone());
+        }
+    }
+
+    let has_residue = stale_svc.is_some() || stale_pod.is_some();
+    Ok(MeshResidueInfo { has_residue, stale_svc, stale_pod })
+}
+
+/// Force-clean stale mesh resources for a specific service + version.
+///
+/// Deletes `{service}-kt-mesh-{version}` service and pod via kubectl.
+#[tauri::command]
+pub async fn cleanup_mesh_residue(
+    service: String,
+    version: String,
+    namespace: Option<String>,
+) -> Result<String, String> {
+    let kubectl_bin = find_bin("kubectl");
+    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let mesh_name = format!("{}-kt-mesh-{}", service, version);
+
+    let mut cleaned = Vec::new();
+
+    // Delete stale service
+    let svc_del = run_kubectl(&kubectl_bin, &["delete", "svc", &mesh_name, "-n", &ns, "--ignore-not-found"]);
+    if let Ok(output) = svc_del {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if !stdout.trim().is_empty() && !stdout.contains("not found") {
+                cleaned.push(format!("svc/{}", mesh_name));
+            }
+        }
+    }
+
+    // Delete stale pod
+    let pod_del = run_kubectl(&kubectl_bin, &["delete", "pod", &mesh_name, "-n", &ns, "--ignore-not-found"]);
+    if let Ok(output) = pod_del {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if !stdout.trim().is_empty() && !stdout.contains("not found") {
+                cleaned.push(format!("pod/{}", mesh_name));
+            }
+        }
+    }
+
+    if cleaned.is_empty() {
+        Ok("没有需要清理的残留资源".to_string())
+    } else {
+        Ok(format!("已清理: {}", cleaned.join(", ")))
+    }
+}
+
+/// Helper: run kubectl with platform-appropriate window creation flags.
+fn run_kubectl(kubectl_bin: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
+    let mut cmd = Command::new(kubectl_bin);
+    cmd.args(args);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.output()
+}

@@ -73,6 +73,8 @@ pub fn run() {
             session::stop_session,
             session::list_sessions,
             session::recover_service,
+            session::check_mesh_residue,
+            session::cleanup_mesh_residue,
             setup::check_setup,
             setup::install_tailscale,
             setup::get_config,

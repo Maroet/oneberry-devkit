@@ -336,6 +336,34 @@ async function doExchange() {
       message.success(`Exchange 已启动: ${selectedService.value} → localhost:${localPort.value}`)
       expandedSession.value = session.id
     } else {
+      // Resolve the actual version mark (same logic as backend)
+      const version = meshVersionHeader.value.trim() || `devkit-${Date.now().toString().slice(-6)}`
+
+      // Pre-flight: use kubectl to check for stale mesh resources
+      const residue = await store.checkMeshResidue(selectedService.value, version)
+      if (residue.has_residue) {
+        // Found stale resources — ask user before proceeding
+        const details = [residue.stale_svc ? `Service: ${residue.stale_svc}` : '', residue.stale_pod ? `Pod: ${residue.stale_pod}` : ''].filter(Boolean).join('\n')
+        exchangeLoading.value = false
+        dialog.warning({
+          title: '检测到残留资源',
+          content: `「${selectedService.value}」存在 version "${version}" 的残留资源：\n\n${details}\n\n可能是你上次异常退出的残留，也可能是同事正在使用此 version。\n\n是否强制清理后重新发起 Mesh？`,
+          positiveText: '清理并重试',
+          negativeText: '取消',
+          onPositiveClick: async () => {
+            try {
+              const cleanMsg = await store.cleanupMeshResidue(selectedService.value, version)
+              message.success(cleanMsg)
+              // Auto-retry after cleanup
+              await doExchange()
+            } catch (cleanErr: any) {
+              message.error(`清理失败: ${cleanErr}`)
+            }
+          },
+        })
+        return
+      }
+
       const session = await store.startMesh(selectedService.value, localPort.value, meshVersionHeader.value)
       message.success(`Mesh 已启动，查看日志获取 Version Header`)
       expandedSession.value = session.id
@@ -343,29 +371,7 @@ async function doExchange() {
     showExchange.value = false
   } catch (e: any) {
     const errMsg = typeof e === 'string' ? e : (e?.message || '启动失败')
-    // Detect stale session conflicts: "already exchanging", kt-selector annotation, invalid status
-    const isConflict = ['already exchanging', 'already', 'kt-selector', 'invalid status'].some(kw => errMsg.includes(kw))
-    if (isConflict) {
-      dialog.warning({
-        title: '服务冲突',
-        content: `「${selectedService.value}」存在残留的拦截状态。\n\n可能是你上次异常退出的残留，也可能是同事正在联调。\n\n强制接管会清理残留并重新发起拦截。`,
-        positiveText: '强制接管',
-        negativeText: '取消',
-        onPositiveClick: async () => {
-          try {
-            message.loading('正在清理残留会话...')
-            await store.recoverService(selectedService.value)
-            message.success('清理完成，正在重新拦截...')
-            // Auto-retry after cleanup
-            await doExchange()
-          } catch (recoverErr: any) {
-            message.error(`清理失败: ${recoverErr}`)
-          }
-        },
-      })
-    } else {
-      message.error(errMsg)
-    }
+    message.error(errMsg)
   } finally {
     exchangeLoading.value = false
   }

@@ -72,6 +72,8 @@ function getMockData<T>(cmd: string, _args?: Record<string, unknown>): T {
     list_sessions: [],
     stop_session: '会话已停止',
     install_tailscale: 'Tailscale 安装完成',
+    check_mesh_residue: { has_residue: false, stale_svc: null, stale_pod: null },
+    cleanup_mesh_residue: '没有需要清理的残留资源',
   }
   return (mocks[cmd] ?? null) as T
 }
@@ -119,6 +121,12 @@ export interface SetupStatus {
   kubectl_available: boolean
   ktctl_available: boolean
   daemon_running: boolean
+}
+
+export interface MeshResidueInfo {
+  has_residue: boolean
+  stale_svc: string | null
+  stale_pod: string | null
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -255,6 +263,14 @@ export const useAppStore = defineStore('app', () => {
     return await safeInvoke<string>('recover_service', { service })
   }
 
+  async function checkMeshResidue(service: string, version: string) {
+    return await safeInvoke<MeshResidueInfo>('check_mesh_residue', { service, version })
+  }
+
+  async function cleanupMeshResidue(service: string, version: string) {
+    return await safeInvoke<string>('cleanup_mesh_residue', { service, version })
+  }
+
   return {
     vpn, cluster,    services,
     sessions,
@@ -266,6 +282,6 @@ export const useAppStore = defineStore('app', () => {
     refreshServices, refreshSessions, startExchange, startMesh, stopSession,
     removeSession,
     addLogLine, getSessionLogs, markSessionEnded, refreshAll, installTailscale,
-    recoverService,
+    recoverService, checkMeshResidue, cleanupMeshResidue,
   }
 })
