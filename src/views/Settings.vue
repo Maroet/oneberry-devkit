@@ -41,6 +41,9 @@
           <n-form-item label="Shadow Image">
             <n-input v-model:value="config.shadow_image" />
           </n-form-item>
+          <n-form-item label="Router Image">
+            <n-input v-model:value="config.router_image" />
+          </n-form-item>
         </div>
 
         <!-- Bundled Tools -->
@@ -152,6 +155,7 @@ const config = reactive({
   namespace: 'oneberry-dev',
   shadow_node: 'hmdev-node01',
   shadow_image: 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-shadow:v0.3.7',
+  router_image: 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-router:v0.3.7',
   theme: 'system',
 })
 
@@ -177,6 +181,7 @@ function resetConfig() {
   config.namespace = 'oneberry-dev'
   config.shadow_node = 'hmdev-node01'
   config.shadow_image = 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-shadow:v0.3.7'
+  config.router_image = 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-router:v0.3.7'
   config.theme = 'system'
 }
 

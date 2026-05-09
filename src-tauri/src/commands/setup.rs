@@ -17,7 +17,13 @@ pub struct AppConfig {
     pub namespace: String,
     pub shadow_node: String,
     pub shadow_image: String,
+    #[serde(default = "default_router_image")]
+    pub router_image: String,
     pub theme: String,
+}
+
+fn default_router_image() -> String {
+    "image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-router:v0.3.7".to_string()
 }
 
 impl Default for AppConfig {
@@ -27,6 +33,7 @@ impl Default for AppConfig {
             namespace: "oneberry-dev".to_string(),
             shadow_node: "hmdev-node01".to_string(),
             shadow_image: "image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-shadow:v0.3.7".to_string(),
+            router_image: default_router_image(),
             theme: "system".to_string(),
         }
     }

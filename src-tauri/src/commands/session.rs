@@ -427,6 +427,10 @@ pub async fn start_exchange(
         args.push("--image".to_string());
         args.push(config.shadow_image);
     }
+    if !config.router_image.is_empty() {
+        args.push("--routerImage".to_string());
+        args.push(config.router_image);
+    }
     if !config.shadow_node.is_empty() {
         args.push("--nodeSelector".to_string());
         args.push(format!("kubernetes.io/hostname={}", config.shadow_node));
@@ -481,6 +485,10 @@ pub async fn start_mesh(
     if !config.shadow_image.is_empty() {
         args.push("--image".to_string());
         args.push(config.shadow_image);
+    }
+    if !config.router_image.is_empty() {
+        args.push("--routerImage".to_string());
+        args.push(config.router_image);
     }
     if !config.shadow_node.is_empty() {
         args.push("--nodeSelector".to_string());

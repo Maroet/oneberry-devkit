@@ -45,6 +45,7 @@ function getMockData<T>(cmd: string, _args?: Record<string, unknown>): T {
       namespace: 'oneberry-dev',
       shadow_node: 'hmdev-node01',
       shadow_image: 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-shadow:v0.3.7',
+      router_image: 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-router:v0.3.7',
       theme: 'system',
     },
     save_config: '配置已保存',
