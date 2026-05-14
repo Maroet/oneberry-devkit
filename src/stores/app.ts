@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 // Check if running inside Tauri
 const isTauri = !!(window as any).__TAURI_INTERNALS__
@@ -47,6 +47,10 @@ function getMockData<T>(cmd: string, _args?: Record<string, unknown>): T {
       shadow_image: 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-shadow:v0.3.7',
       router_image: 'image.hm.metavarse.tech:9443/hongmei-dev/kt-connect-router:v0.3.7',
       theme: 'system',
+      namespace_presets: [
+        { label: 'Dev', value: 'oneberry-dev' },
+        { label: 'Beta', value: 'oneberry-beta' },
+      ],
     },
     save_config: '配置已保存',
     connect_vpn: 'VPN 连接请求已发送',
@@ -129,6 +133,17 @@ export interface MeshResidueInfo {
   stale_pod: string | null
 }
 
+// Namespace presets for quick switching
+export interface NamespacePreset {
+  label: string  // Display name, e.g. "Dev", "Beta"
+  value: string  // K8s namespace, e.g. "oneberry-dev", "oneberry-beta"
+}
+
+export const DEFAULT_NAMESPACE_PRESETS: NamespacePreset[] = [
+  { label: 'Dev', value: 'oneberry-dev' },
+  { label: 'Beta', value: 'oneberry-beta' },
+]
+
 export const useAppStore = defineStore('app', () => {
   const vpn = ref<VpnStatus>({ status: 'unknown' })
   const cluster = ref<ClusterStatus>({ status: 'unknown', node_count: 0 })
@@ -138,6 +153,14 @@ export const useAppStore = defineStore('app', () => {
   const systemLogs = ref<string[]>([])
   const loading = ref(false)
   const mockMode = ref(!isTauri)
+  const currentNamespace = ref('oneberry-dev')
+  const namespacePresets = ref<NamespacePreset[]>([...DEFAULT_NAMESPACE_PRESETS])
+
+  // Derived: environment label for display
+  const currentEnvLabel = computed(() => {
+    const preset = namespacePresets.value.find(p => p.value === currentNamespace.value)
+    return preset?.label || currentNamespace.value
+  })
 
   function addSystemLog(msg: string) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -182,10 +205,17 @@ export const useAppStore = defineStore('app', () => {
 
   async function refreshServices() {
     try {
-      services.value = await safeInvoke<K8sService[]>('list_services')
+      services.value = await safeInvoke<K8sService[]>('list_services', { namespace: currentNamespace.value })
     } catch (e) {
       console.warn('Failed to list services:', e)
     }
+  }
+
+  async function switchNamespace(ns: string) {
+    currentNamespace.value = ns
+    addSystemLog(`切换命名空间: ${ns}`)
+    // Refresh services for the new namespace
+    await refreshServices()
   }
 
   async function refreshSessions() {
@@ -278,8 +308,9 @@ export const useAppStore = defineStore('app', () => {
     systemLogs,
     addSystemLog,
     loading, mockMode,
+    currentNamespace, namespacePresets, currentEnvLabel,
     checkSetup, refreshVpn, connectVpn, disconnectVpn, refreshCluster,
-    refreshServices, refreshSessions, startExchange, startMesh, stopSession,
+    refreshServices, refreshSessions, switchNamespace, startExchange, startMesh, stopSession,
     removeSession,
     addLogLine, getSessionLogs, markSessionEnded, refreshAll, installTailscale,
     recoverService, checkMeshResidue, cleanupMeshResidue,

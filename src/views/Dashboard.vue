@@ -32,7 +32,7 @@
         <n-icon :component="Rocket" size="48" color="#d1d5db" />
       </div>
       <h3 style="margin-top: 20px; color: var(--text-primary)">暂无活跃的拦截会话</h3>
-      <p style="color: var(--text-secondary); margin-top: 8px;">已连接到开发集群。点击「拦截服务」将集群流量路由到你的本地机器。</p>
+      <p style="color: var(--text-secondary); margin-top: 8px;">已连接到{{ store.currentEnvLabel }}集群。点击「拦截服务」将集群流量路由到你的本地机器。</p>
       
       <n-button 
         v-if="isEnvConnected"
@@ -134,7 +134,7 @@
     </div>
 
     <!-- Service Selection Modal -->
-    <n-modal v-model:show="showServiceSelector" preset="card" title="选择要拦截的服务" class="service-modal" style="width: 500px; border-radius: 16px;">
+    <n-modal v-model:show="showServiceSelector" preset="card" :title="`选择要拦截的服务 (${store.currentNamespace})`" class="service-modal" style="width: 500px; border-radius: 16px;">
       <div class="modal-search">
         <n-input v-model:value="searchQuery" placeholder="搜索服务名称..." clearable>
           <template #prefix><n-icon :component="Search" /></template>

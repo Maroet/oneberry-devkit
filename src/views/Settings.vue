@@ -25,7 +25,7 @@
             <h3>集群</h3>
           </div>
           <n-form-item label="命名空间">
-            <n-input v-model:value="config.namespace" />
+            <n-select v-model:value="config.namespace" :options="namespaceOptions" />
           </n-form-item>
         </div>
 
@@ -131,7 +131,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useMessage } from 'naive-ui'
-import { useAppStore } from '../stores/app'
+import { useAppStore, DEFAULT_NAMESPACE_PRESETS } from '../stores/app'
 import { useUpdater } from '../composables/useUpdater'
 
 const message = useMessage()
@@ -149,6 +149,11 @@ try {
     })
   }
 } catch {}
+
+const namespaceOptions = DEFAULT_NAMESPACE_PRESETS.map(p => ({
+  label: `${p.label} (${p.value})`,
+  value: p.value,
+}))
 
 const config = reactive({
   headscale_url: 'https://vpn.oneberry.cc:31443',
@@ -169,6 +174,8 @@ async function saveSettings() {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('save_config', { config })
     }
+    // Sync namespace to store after saving
+    await store.switchNamespace(config.namespace)
     message.success('设置已保存')
   } catch (e: any) {
     message.error(typeof e === 'string' ? e : '保存失败')

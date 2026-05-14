@@ -65,7 +65,19 @@
           <div class="main-panel">
             <header class="app-header">
               <div class="header-left">
-                <span class="env-label">开发环境</span>
+                <div class="env-switcher">
+                  <button
+                    v-for="preset in store.namespacePresets"
+                    :key="preset.value"
+                    class="env-tab"
+                    :class="{ active: store.currentNamespace === preset.value }"
+                    @click="switchEnv(preset.value)"
+                    :disabled="isConnecting"
+                  >
+                    <span class="env-tab-dot" :class="store.currentNamespace === preset.value && isEnvConnected ? 'green pulse' : 'gray'"></span>
+                    {{ preset.label }}
+                  </button>
+                </div>
                 <n-switch
                   class="switch-control"
                   :value="isEnvConnected"
@@ -80,7 +92,9 @@
               </div>
 
               <div class="header-right">
-                <!-- Placeholder for future right aligned items like user profile -->
+                <n-tag size="small" :bordered="false" round type="info" class="ns-badge">
+                  {{ store.currentNamespace }}
+                </n-tag>
               </div>
             </header>
             
@@ -163,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { zhCN, dateZhCN, createDiscreteApi, NIcon, NButton, NProgress } from 'naive-ui'
+import { zhCN, dateZhCN, createDiscreteApi, NIcon, NButton, NProgress, NTag } from 'naive-ui'
 import { Hexagon, LayoutDashboard, Settings as SettingsIcon, Beaker, ScrollText, ArrowUpCircle, Download, X, RefreshCw, AlertCircle } from 'lucide-vue-next'
 import { useRouter, useRoute } from 'vue-router'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
@@ -200,6 +214,17 @@ const isWindows = navigator.platform.startsWith('Win')
 const appCleanups: (() => void)[] = []
 
 onMounted(async () => {
+  // Load saved config namespace into store
+  if ((window as any).__TAURI_INTERNALS__) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const config = await invoke<any>('get_config')
+      if (config?.namespace) {
+        store.currentNamespace = config.namespace
+      }
+    } catch {}
+  }
+
   // Initial status check
   await store.refreshVpn()
   await store.refreshCluster()
@@ -254,9 +279,10 @@ const envStatusClass = computed(() => {
 })
 
 const envStatusText = computed(() => {
+  const envName = store.currentEnvLabel
   if (store.vpn.status === 'not_installed') return '未安装'
   if (isConnecting.value) return '连接中...'
-  if (isEnvConnected.value) return '已连接'
+  if (isEnvConnected.value) return `${envName} 已连接`
   if (store.vpn.status === 'connected') return 'VPN 已连接'
   return '未连接'
 })
@@ -457,6 +483,27 @@ async function toggleEnvironment(val: boolean) {
     }
   }
 }
+async function switchEnv(ns: string) {
+  if (ns === store.currentNamespace) return
+  await store.switchNamespace(ns)
+
+  // Persist namespace change to backend config
+  if ((window as any).__TAURI_INTERNALS__) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const config = await invoke<any>('get_config')
+      config.namespace = ns
+      await invoke('save_config', { config })
+    } catch (e) {
+      console.warn('Failed to persist namespace:', e)
+    }
+  }
+
+  // If connected, refresh services for the new namespace
+  if (isEnvConnected.value) {
+    message.success(`已切换到 ${store.currentEnvLabel} 环境`)
+  }
+}
 </script>
 
 <style scoped>
@@ -580,10 +627,67 @@ async function toggleEnvironment(val: boolean) {
   -webkit-app-region: no-drag;
 }
 
-.env-label {
-  font-size: 15px;
+.env-switcher {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.env-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.env-tab:hover:not(:disabled) {
+  background: rgba(0,0,0,0.03);
   color: var(--text-primary);
+}
+
+.env-tab.active {
+  background: #ffffff;
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.env-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.env-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.env-tab-dot.green {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+
+.env-tab-dot.gray {
+  background: var(--text-muted);
+}
+
+.ns-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 .switch-control {

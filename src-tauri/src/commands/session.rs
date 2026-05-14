@@ -394,7 +394,7 @@ pub async fn start_exchange(
     port: u16,
     namespace: Option<String>,
 ) -> Result<SessionInfo, String> {
-    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let ns = namespace.unwrap_or_else(|| load_config().namespace);
 
     // Check if local port is listening
     let check = std::net::TcpStream::connect(format!("127.0.0.1:{}", port));
@@ -448,7 +448,7 @@ pub async fn start_mesh(
     namespace: Option<String>,
     version_header: Option<String>,
 ) -> Result<SessionInfo, String> {
-    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let ns = namespace.unwrap_or_else(|| load_config().namespace);
 
     let check = std::net::TcpStream::connect(format!("127.0.0.1:{}", port));
     if check.is_err() {
@@ -524,7 +524,7 @@ pub async fn recover_service(
     namespace: Option<String>,
 ) -> Result<String, String> {
     let ktctl_bin = find_bin("ktctl");
-    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let ns = namespace.unwrap_or_else(|| load_config().namespace);
 
     #[cfg(target_os = "macos")]
     {
@@ -622,7 +622,7 @@ pub async fn check_mesh_residue(
     namespace: Option<String>,
 ) -> Result<MeshResidueInfo, String> {
     let kubectl_bin = find_bin("kubectl");
-    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let ns = namespace.unwrap_or_else(|| load_config().namespace);
     let mesh_name = format!("{}-kt-mesh-{}", service, version);
 
     let mut stale_svc = None;
@@ -658,7 +658,7 @@ pub async fn cleanup_mesh_residue(
     namespace: Option<String>,
 ) -> Result<String, String> {
     let kubectl_bin = find_bin("kubectl");
-    let ns = namespace.unwrap_or_else(|| "oneberry-dev".to_string());
+    let ns = namespace.unwrap_or_else(|| load_config().namespace);
     let mesh_name = format!("{}-kt-mesh-{}", service, version);
 
     let mut cleaned = Vec::new();

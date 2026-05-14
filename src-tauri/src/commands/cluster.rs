@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use crate::utils::{find_bin, run_cli};
+use crate::commands::setup::AppConfig;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClusterStatus {
@@ -51,18 +52,33 @@ pub async fn check_cluster() -> Result<ClusterStatus, String> {
     }
 }
 
+/// Load the user's AppConfig namespace from disk.
+fn load_namespace() -> String {
+    let home = dirs_next::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let path = home.join(".oneberry").join("config.json");
+    if path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Ok(cfg) = serde_json::from_str::<AppConfig>(&content) {
+                return cfg.namespace;
+            }
+        }
+    }
+    AppConfig::default().namespace
+}
+
 #[tauri::command]
-pub async fn list_services() -> Result<Vec<K8sService>, String> {
+pub async fn list_services(namespace: Option<String>) -> Result<Vec<K8sService>, String> {
+    let ns = namespace.unwrap_or_else(load_namespace);
     let output = run_cli(&find_bin("kubectl"), &[
             "get", "deployments",
-            "-n", "oneberry-dev",
+            "-n", &ns,
             "-o", "json",
         ])
         .map_err(|e| format!("kubectl 执行失败: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("获取服务列表失败: {}", stderr));
+        return Err(format!("获取服务列表失败 ({}): {}", ns, stderr));
     }
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)
